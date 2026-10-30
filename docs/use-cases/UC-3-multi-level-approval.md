@@ -82,6 +82,15 @@ two different people to sign off.
 34. Authority refusals (29–33) return **403**. Lifecycle conflicts — wrong status, or a competing
     decision saved first — return **409**. A missing invoice returns **404**. A missing rejection
     reason returns **400**.
+34a. `RoleCannotApprove` is checked **first**, before the invoice is loaded and before the rejection
+    reason is validated. A role with no approval authority therefore always sees 403 — never 404, 409
+    or 400 — so the approval endpoints cannot be used to discover which invoice numbers exist or what
+    state they are in. Someone who could legitimately have approved still sees 404 for a missing
+    invoice.
+34b. Which roles may approve is owned solely by `Approval:RoleLimits`. It is not repeated as a route
+    restriction, so adding a role to configuration is the only edit needed to grant approval
+    authority. Startup fails if the second-approver role has no configured limit, if any limit is not
+    greater than zero, or if a role name is blank.
 
 ### Concurrency
 

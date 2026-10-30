@@ -16,7 +16,38 @@ public class ApprovalPolicy
             throw new ArgumentException("At least one role limit must be configured.", nameof(roleLimits));
         }
 
+        foreach (var (role, limit) in roleLimits)
+        {
+            if (string.IsNullOrWhiteSpace(role))
+            {
+                throw new ArgumentException("A role name cannot be blank.", nameof(roleLimits));
+            }
+
+            if (limit <= 0)
+            {
+                throw new ArgumentException(
+                    $"The limit for {role} is {limit}; approval limits must be greater than zero.",
+                    nameof(roleLimits));
+            }
+        }
+
         _roleLimits = new Dictionary<string, decimal>(roleLimits, StringComparer.OrdinalIgnoreCase);
+
+        if (string.IsNullOrWhiteSpace(secondApproverRole))
+        {
+            throw new ArgumentException(
+                "The second-approver role must be configured.", nameof(secondApproverRole));
+        }
+
+        if (!_roleLimits.ContainsKey(secondApproverRole))
+        {
+            throw new ArgumentException(
+                $"The second-approver role {secondApproverRole} has no configured limit, so no invoice " +
+                $"above the dual-approval threshold could ever be approved. Known roles: " +
+                $"{string.Join(", ", _roleLimits.Keys)}.",
+                nameof(secondApproverRole));
+        }
+
         SecondApproverRole = secondApproverRole;
     }
 

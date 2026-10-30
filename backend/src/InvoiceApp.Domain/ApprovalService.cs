@@ -37,6 +37,8 @@ public class ApprovalService
     /// </summary>
     public Invoice Approve(string invoiceId, Approver approver)
     {
+        EnsureRoleMayDecide(approver);
+
         var invoice = Find(invoiceId);
         EnsurePending(invoice);
         EnsureMayApprove(invoice, approver);
@@ -59,6 +61,8 @@ public class ApprovalService
     /// </summary>
     public Invoice Reject(string invoiceId, Approver approver, string reason)
     {
+        EnsureRoleMayDecide(approver);
+
         if (string.IsNullOrWhiteSpace(reason))
         {
             throw new ArgumentException("A reason is required to reject an invoice.", nameof(reason));
@@ -66,7 +70,6 @@ public class ApprovalService
 
         var invoice = Find(invoiceId);
         EnsurePending(invoice);
-        EnsureRoleMayDecide(approver);
 
         invoice.Status = InvoiceStatus.Rejected;
         invoice.DecidedBy = approver.Username;
@@ -78,8 +81,6 @@ public class ApprovalService
     /// <summary>All the checks that can refuse an approval, in the order their reasons are reported.</summary>
     private void EnsureMayApprove(Invoice invoice, Approver approver)
     {
-        EnsureRoleMayDecide(approver);
-
         if (IsSameUser(invoice.SubmittedBy, approver.Username))
         {
             throw new ApprovalRefusedException(

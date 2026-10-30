@@ -14,9 +14,10 @@ Invoice approval demo app: ASP.NET Core 8 Web API with a small static web UI.
 
 - Controllers live in `Controllers/`, one per resource, route `api/[controller]`. Request bodies are `record` types declared inside the controller.
 - Controllers inherit `ApiControllerBase` and use `Handle(...)` so service errors map to 404, 409 and 400.
-- Every endpoint is behind sign-in. Restrict actions with `[RequireRole("...")]`: destructive actions are Admin only, approvals are Manager or Director.
+- Every endpoint is behind sign-in. Restrict actions with `[RequireRole("...")]` **only for static permissions that configuration does not own** — `Delete` is Admin only. Never use it to list the roles that may approve: that fact lives in `Approval:RoleLimits` and a second copy would silently block any role added there.
 - Business rules go in the Domain project, never in controllers.
-- Approval rules live in `ApprovalService`; the role limits live in `ApprovalPolicy`, bound from `Approval:RoleLimits`. Add a limit by editing configuration, never by adding an `if` to the service.
+- Approval rules live in `ApprovalService`; the role limits live in `ApprovalPolicy`, bound from `Approval:RoleLimits`. Adding a role to configuration is the only edit needed to grant approval authority. Startup fails fast on a ladder that cannot work.
+- Authority is checked before anything else — before the invoice is loaded and before arguments are validated — so a role that cannot approve always gets 403 and never learns whether an invoice exists.
 - Validate everything before mutating anything, so a refused attempt leaves the invoice untouched.
 - Repository reads return clones and `Update` returns `false` if the `Version` moved. Forgetting to call `Update` silently persists nothing, so a test that changes an invoice must re-read it through the repository.
 - Register services in `Program.cs`. Repositories are interfaces in Domain with an in-memory implementation in Api.
@@ -46,7 +47,7 @@ Decisions behind the table, so they are not re-litigated:
 
 A refused attempt changes nothing and says why. `ApprovalService` throws `ApprovalRefusedException` with a reason code; `ApiControllerBase` maps it to **403** with `{ error, reason }`. Lifecycle problems stay **409**, a missing invoice **404**, a bad argument **400**.
 
-Reason codes from the domain: `AboveApprovalLimit`, `SelfApprovalNotAllowed`, `DuplicateApprover`, `SecondApproverMustBeDirector`, `RoleCannotApprove`. `[RequireRole]` refuses earlier, at the route, with `RoleNotPermitted` — same shape, so a caller never has to know which layer refused. The message must name the concrete fact — the limit or the required role — because the UI shows it to a person. Codes are API surface once the UI switches on them.
+Reason codes from the domain: `AboveApprovalLimit`, `SelfApprovalNotAllowed`, `DuplicateApprover`, `SecondApproverMustBeDirector`, `RoleCannotApprove`. `[RequireRole]` refuses at the route with `RoleNotPermitted`, used only for static permissions like `Delete`. The message must name the concrete fact — the limit or the required role — because the UI shows it to a person. Codes are API surface once the UI switches on them.
 
 ## Commands
 

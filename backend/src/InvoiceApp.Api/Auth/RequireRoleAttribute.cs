@@ -21,7 +21,7 @@ public class RequireRoleAttribute : ActionFilterAttribute
     {
         var session = context.HttpContext.Items[HttpContextExtensions.SessionKey] as UserSession;
 
-        if (session is not null && _roles.Contains(session.Role))
+        if (session is not null && _roles.Contains(session.Role, StringComparer.OrdinalIgnoreCase))
         {
             return;
         }

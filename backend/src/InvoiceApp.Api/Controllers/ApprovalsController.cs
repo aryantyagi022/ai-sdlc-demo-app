@@ -6,9 +6,12 @@ namespace InvoiceApp.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[RequireRole("Manager", "Director")]
 public class ApprovalsController : ApiControllerBase
 {
+    // No [RequireRole] here on purpose: which roles may approve is owned by Approval:RoleLimits
+    // and enforced by ApprovalService. Repeating the list here would be a second copy that
+    // silently blocks any role added to configuration.
+
     private readonly ApprovalService _approvals;
 
     public ApprovalsController(ApprovalService approvals)

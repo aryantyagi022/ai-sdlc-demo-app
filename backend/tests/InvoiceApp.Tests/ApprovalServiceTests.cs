@@ -464,6 +464,65 @@ public class ApprovalServiceTests
         Assert.Single(result.Approvals);
         Assert.Equal("demo.director", result.Approvals[0].Username);
     }
+
+    // ---- Authority is checked before anything else, and comes only from configuration ----
+
+    [Fact]
+    public void Approve_RefusesAnIneligibleRoleWithoutRevealingWhetherTheInvoiceExists()
+    {
+        var service = ServiceFor();
+
+        var refusal = Assert.Throws<ApprovalRefusedException>(() => service.Approve("INV-404", AnAdmin));
+
+        Assert.Equal(ApprovalRefusalReason.RoleCannotApprove, refusal.Reason);
+    }
+
+    [Fact]
+    public void Reject_RefusesAnIneligibleRoleWithoutRevealingWhetherTheInvoiceExists()
+    {
+        var service = ServiceFor();
+
+        var refusal = Assert.Throws<ApprovalRefusedException>(
+            () => service.Reject("INV-404", AnAdmin, "No reason to care"));
+
+        Assert.Equal(ApprovalRefusalReason.RoleCannotApprove, refusal.Reason);
+    }
+
+    [Fact]
+    public void Reject_ChecksAuthorityBeforeTheReasonIsValidated()
+    {
+        var service = ServiceFor(InvoiceWith("INV-1", InvoiceStatus.PendingApproval));
+
+        var refusal = Assert.Throws<ApprovalRefusedException>(() => service.Reject("INV-1", AnAdmin, "  "));
+
+        Assert.Equal(ApprovalRefusalReason.RoleCannotApprove, refusal.Reason);
+    }
+
+    [Fact]
+    public void Approve_StillReportsAMissingInvoiceToSomeoneWhoCouldHaveApprovedIt()
+    {
+        var service = ServiceFor();
+
+        Assert.Throws<KeyNotFoundException>(() => service.Approve("INV-404", ADirector));
+    }
+
+    [Fact] // adding a role to configuration is the only edit needed to grant approval authority
+    public void Approve_AllowsARoleThatOnlyExistsInConfiguration()
+    {
+        var ladder = new Dictionary<string, decimal>
+        {
+            [Manager] = 50_000m,
+            ["VicePresident"] = 250_000m,
+            [Director] = 500_000m
+        };
+        var service = new ApprovalService(
+            new FakeInvoiceRepository(InvoiceWith("INV-1", InvoiceStatus.PendingApproval, 200_000m)),
+            new ApprovalPolicy(ladder, Director));
+
+        var result = service.Approve("INV-1", new Approver("demo.vp", "VicePresident"));
+
+        Assert.Equal(InvoiceStatus.Approved, result.Status);
+    }
 }
 
 /// <summary>
