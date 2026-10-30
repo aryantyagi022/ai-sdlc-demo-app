@@ -61,6 +61,22 @@ Deeper guidance lives in `.github/skills/`. Load the relevant one before startin
 | `pr-self-review` | before opening a PR or calling work finished |
 | `ai-interaction-log` | writing the one task-level log entry at the end |
 
+## Agents
+
+Custom agents live in `.github/agents/`. Each gets only the tools its job needs; the three review
+roles are read-only on purpose, so they cannot be reassured by a green run or quietly patch away a
+finding.
+
+| Agent | Tools | Use it to |
+|---|---|---|
+| `explorer` | read, search | map unfamiliar code with `path:line` citations before changing it |
+| `spec-writer` | read, search, edit | turn a brief into numbered testable rules in `docs/use-cases/` |
+| `test-author` | read, search, edit, execute | write tests and prove each one fails when its rule breaks |
+| `domain-implementer` | read, search, edit, execute | implement rules in `InvoiceApp.Domain` |
+| `test-critic` | read, search | predict which tests a deliberate break should fail, and find the rules with none |
+| `e2e-author` | read, search, edit, execute, playwright | write Playwright specs and look at the rendered page |
+| `pr-reviewer` | read, search, github | adversarial review with fixed/dismissed/deferred verdicts |
+
 ## Commands
 
 - Run the app: `dotnet run --project backend/src/InvoiceApp.Api` then open http://localhost:5000
