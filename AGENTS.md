@@ -49,6 +49,18 @@ A refused attempt changes nothing and says why. `ApprovalService` throws `Approv
 
 Reason codes from the domain: `AboveApprovalLimit`, `SelfApprovalNotAllowed`, `DuplicateApprover`, `SecondApproverMustBeDirector`, `RoleCannotApprove`. `[RequireRole]` refuses at the route with `RoleNotPermitted`, used only for static permissions like `Delete`. The message must name the concrete fact — the limit or the required role — because the UI shows it to a person. Codes are API surface once the UI switches on them.
 
+## Skills
+
+Deeper guidance lives in `.github/skills/`. Load the relevant one before starting:
+
+| Skill | Use it when |
+|---|---|
+| `approval-rules` | changing `ApprovalService`, `ApprovalPolicy`, the approvals endpoints, or any test about who may approve what |
+| `dotnet-test-and-mutation` | adding or changing tests, or before claiming something is verified |
+| `playwright-e2e` | adding end-to-end tests or changing the UI under `wwwroot/` |
+| `pr-self-review` | before opening a PR or calling work finished |
+| `ai-interaction-log` | writing the one task-level log entry at the end |
+
 ## Commands
 
 - Run the app: `dotnet run --project backend/src/InvoiceApp.Api` then open http://localhost:5000
