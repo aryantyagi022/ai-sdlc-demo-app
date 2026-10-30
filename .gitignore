@@ -8,3 +8,8 @@ node_modules/
 .env
 test-results/
 playwright-report/
+
+# AI interaction logs: raw payloads contain full prompt text, so keep them local.
+ai-logs/raw/
+ai-logs/.state/
+ai-logs/*.lock
