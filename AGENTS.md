@@ -46,7 +46,7 @@ Decisions behind the table, so they are not re-litigated:
 
 A refused attempt changes nothing and says why. `ApprovalService` throws `ApprovalRefusedException` with a reason code; `ApiControllerBase` maps it to **403** with `{ error, reason }`. Lifecycle problems stay **409**, a missing invoice **404**, a bad argument **400**.
 
-Reason codes: `AboveApprovalLimit`, `SelfApprovalNotAllowed`, `DuplicateApprover`, `SecondApproverMustBeDirector`, `RoleCannotApprove`. The message must name the concrete fact — the limit or the required role — because the UI shows it to a person. Codes are API surface once the UI switches on them.
+Reason codes from the domain: `AboveApprovalLimit`, `SelfApprovalNotAllowed`, `DuplicateApprover`, `SecondApproverMustBeDirector`, `RoleCannotApprove`. `[RequireRole]` refuses earlier, at the route, with `RoleNotPermitted` — same shape, so a caller never has to know which layer refused. The message must name the concrete fact — the limit or the required role — because the UI shows it to a person. Codes are API surface once the UI switches on them.
 
 ## Commands
 

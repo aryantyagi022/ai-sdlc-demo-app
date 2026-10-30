@@ -10,17 +10,19 @@ public class InvoicesController : ApiControllerBase
 {
     private readonly IInvoiceRepository _repository;
     private readonly ApprovalService _approvals;
+    private readonly ApprovalPolicy _policy;
 
-    public InvoicesController(IInvoiceRepository repository, ApprovalService approvals)
+    public InvoicesController(IInvoiceRepository repository, ApprovalService approvals, ApprovalPolicy policy)
     {
         _repository = repository;
         _approvals = approvals;
+        _policy = policy;
     }
 
     public record CreateInvoiceRequest(string CustomerName, decimal Amount);
 
     [HttpGet]
-    public ActionResult<IReadOnlyList<Invoice>> GetAll([FromQuery] string? status)
+    public ActionResult<IReadOnlyList<InvoiceView>> GetAll([FromQuery] string? status)
     {
         var invoices = _repository.GetAll();
 
@@ -34,14 +36,14 @@ public class InvoicesController : ApiControllerBase
             invoices = invoices.Where(i => i.Status == parsed).ToList();
         }
 
-        return Ok(invoices);
+        return Ok(invoices.Select(invoice => InvoiceView.From(invoice, _policy)).ToList());
     }
 
     [HttpGet("{id}")]
-    public ActionResult<Invoice> GetById(string id)
+    public ActionResult<InvoiceView> GetById(string id)
     {
         var invoice = _repository.GetById(id);
-        return invoice is null ? NotFound() : Ok(invoice);
+        return invoice is null ? NotFound() : Ok(InvoiceView.From(invoice, _policy));
     }
 
     [HttpPost]
@@ -67,7 +69,8 @@ public class InvoicesController : ApiControllerBase
     }
 
     [HttpPost("{id}/submit")]
-    public ActionResult<Invoice> Submit(string id) => Handle(() => _approvals.Submit(id));
+    public ActionResult<Invoice> Submit(string id) =>
+        Handle(() => _approvals.Submit(id, HttpContext.GetSession().Username));
 
     [HttpDelete("{id}")]
     [RequireRole("Admin")]

@@ -16,6 +16,12 @@ public abstract class ApiControllerBase : ControllerBase
         {
             return NotFound(new { error = ex.Message });
         }
+        catch (ApprovalRefusedException ex)
+        {
+            return StatusCode(
+                StatusCodes.Status403Forbidden,
+                new { error = ex.Message, reason = ex.Reason.ToString() });
+        }
         catch (InvalidOperationException ex)
         {
             return Conflict(new { error = ex.Message });
