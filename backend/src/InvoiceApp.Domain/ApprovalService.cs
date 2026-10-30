@@ -78,6 +78,29 @@ public class ApprovalService
         return Save(invoice);
     }
 
+    /// <summary>
+    /// Answers "could this person approve this invoice right now?" using the very checks that
+    /// enforce it, so what the UI shows can never drift from what the service allows.
+    /// </summary>
+    public ApprovalEligibility EligibilityFor(Invoice invoice, Approver approver)
+    {
+        try
+        {
+            EnsureRoleMayDecide(approver);
+            EnsurePending(invoice);
+            EnsureMayApprove(invoice, approver);
+            return ApprovalEligibility.Allowed;
+        }
+        catch (ApprovalRefusedException refusal)
+        {
+            return ApprovalEligibility.Refused(refusal.Reason, refusal.Message);
+        }
+        catch (InvalidOperationException notPending)
+        {
+            return ApprovalEligibility.NotOpenForDecision(notPending.Message);
+        }
+    }
+
     /// <summary>All the checks that can refuse an approval, in the order their reasons are reported.</summary>
     private void EnsureMayApprove(Invoice invoice, Approver approver)
     {

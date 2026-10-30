@@ -6,7 +6,7 @@ namespace InvoiceApp.Api.Controllers;
 public abstract class ApiControllerBase : ControllerBase
 {
     /// <summary>Runs a service call and maps its failures to HTTP status codes.</summary>
-    protected ActionResult<Invoice> Handle(Func<Invoice> action)
+    protected ActionResult<TResult> Handle<TResult>(Func<TResult> action)
     {
         try
         {

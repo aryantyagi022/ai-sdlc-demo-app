@@ -13,21 +13,26 @@ public class ApprovalsController : ApiControllerBase
     // silently blocks any role added to configuration.
 
     private readonly ApprovalService _approvals;
+    private readonly ApprovalPolicy _policy;
 
-    public ApprovalsController(ApprovalService approvals)
+    public ApprovalsController(ApprovalService approvals, ApprovalPolicy policy)
     {
         _approvals = approvals;
+        _policy = policy;
     }
 
     public record RejectRequest(string Reason);
 
     [HttpPost("{invoiceId}/approve")]
-    public ActionResult<Invoice> Approve(string invoiceId) =>
-        Handle(() => _approvals.Approve(invoiceId, CurrentApprover()));
+    public ActionResult<InvoiceView> Approve(string invoiceId) =>
+        Handle(() => View(_approvals.Approve(invoiceId, CurrentApprover())));
 
     [HttpPost("{invoiceId}/reject")]
-    public ActionResult<Invoice> Reject(string invoiceId, [FromBody] RejectRequest request) =>
-        Handle(() => _approvals.Reject(invoiceId, CurrentApprover(), request.Reason));
+    public ActionResult<InvoiceView> Reject(string invoiceId, [FromBody] RejectRequest request) =>
+        Handle(() => View(_approvals.Reject(invoiceId, CurrentApprover(), request.Reason)));
+
+    private InvoiceView View(Invoice invoice) =>
+        InvoiceView.From(invoice, _policy, _approvals.EligibilityFor(invoice, CurrentApprover()));
 
     private Approver CurrentApprover()
     {

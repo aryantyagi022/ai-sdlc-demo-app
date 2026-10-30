@@ -54,7 +54,9 @@
               <th scope="col">ID</th>
               <th scope="col">Customer</th>
               <th scope="col">Amount</th>
+              <th scope="col">Submitted by</th>
               <th scope="col">Status</th>
+              <th scope="col">Approvals</th>
               <th scope="col">Actions</th>
             </tr>
           </thead>
@@ -64,6 +66,7 @@
 
       <section id="approvals-panel" role="tabpanel" aria-labelledby="tab-approvals" hidden>
         <h2>Pending approvals</h2>
+        <p id="approver-note" role="status" hidden></p>
         <p id="pending-empty" hidden>Nothing is waiting for approval.</p>
         <ul id="pending-list"></ul>
         <p id="decision-error" role="alert" hidden></p>

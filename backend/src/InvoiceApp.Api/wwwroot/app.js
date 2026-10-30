@@ -19,8 +19,24 @@
     const response = await fetch(`/api${path}`, { ...options, headers });
     if (response.status === 401 && session) { signOut(); throw new Error('Session expired.'); }
     const body = response.status === 204 ? null : await response.json().catch(() => null);
-    if (!response.ok) throw new Error((body && body.error) || `Request failed (${response.status})`);
+    if (!response.ok) {
+      const failure = new Error((body && body.error) || `Request failed (${response.status})`);
+      failure.reason = body && body.reason;
+      throw failure;
+    }
     return body;
+  }
+
+  function approvalProgress(invoice) {
+    const signed = invoice.approvals.length;
+    const required = invoice.approvalsRequired || 1;
+    if (invoice.status !== 'PendingApproval') {
+      return signed ? `${signed} of ${required}` : 'None';
+    }
+    if (invoice.awaitingSecondApproval) {
+      return `${signed} of ${required} - needs a Director`;
+    }
+    return `${signed} of ${required}`;
   }
 
   function show(id, visible) { $(id).hidden = !visible; }
@@ -56,26 +72,54 @@
         el('td', {}, invoice.id),
         el('td', {}, invoice.customerName),
         el('td', {}, money.format(invoice.amount)),
+        el('td', {}, invoice.submittedBy || '-'),
         el('td', { class: `status status-${invoice.status}` }, invoice.status.replace(/([a-z])([A-Z])/g, '$1 $2')),
+        el('td', {}, approvalProgress(invoice)),
         actions);
     }));
   }
 
   function renderPending(pending) {
-    show('pending-empty', pending.length === 0);
-    $('pending-list').replaceChildren(...pending.map((invoice) => {
-      const reasonId = `reason-${invoice.id}`;
-      const approve = el('button', { type: 'button', 'aria-label': `Approve invoice ${invoice.id}` }, 'Approve');
-      const reject = el('button', { type: 'button', class: 'danger', 'aria-label': `Reject invoice ${invoice.id}` }, 'Reject');
-      const reason = el('input', { id: reasonId, 'aria-label': `Rejection reason for ${invoice.id}`, placeholder: 'Reason (required to reject)' });
+    // The server decides which roles may approve; the UI never re-derives the ladder.
+    const mayDecide = session.canApprove;
 
-      approve.addEventListener('click', () => decide(`/approvals/${invoice.id}/approve`, {}));
+    showError('approver-note', mayDecide
+      ? ''
+      : `Your role (${session.role}) cannot approve or reject invoices.`);
+    show('pending-empty', pending.length === 0);
+
+    $('pending-list').replaceChildren(...pending.map((invoice) => {
+      const summary = el('span', {},
+        `${invoice.id} · ${invoice.customerName} · ${money.format(invoice.amount)}`);
+      const badge = el('span', { class: 'badge', 'data-testid': `progress-${invoice.id}` },
+        approvalProgress(invoice));
+      const row = el('li', {}, summary, badge);
+
+      if (!mayDecide) {
+        return row;
+      }
+
+      const eligibility = invoice.yourApproval || { canApprove: true };
+      const approve = el('button', { type: 'button', 'aria-label': `Approve invoice ${invoice.id}` }, 'Approve');
+
+      if (!eligibility.canApprove) {
+        approve.disabled = true;
+        approve.title = eligibility.explanation || '';
+        row.append(el('span', { role: 'note', class: 'refusal' }, eligibility.explanation || ''));
+      } else {
+        approve.addEventListener('click', () => decide(`/approvals/${invoice.id}/approve`, {}));
+      }
+
+      const reject = el('button', { type: 'button', class: 'danger', 'aria-label': `Reject invoice ${invoice.id}` }, 'Reject');
+      const reason = el('input', {
+        id: `reason-${invoice.id}`,
+        'aria-label': `Rejection reason for ${invoice.id}`,
+        placeholder: 'Reason (required to reject)'
+      });
       reject.addEventListener('click', () => decide(`/approvals/${invoice.id}/reject`, { reason: reason.value }));
 
-      return el('li', {},
-        el('span', {}, `${invoice.id} · ${invoice.customerName} · ${money.format(invoice.amount)}`),
-        el('span', {}, approve),
-        el('div', { class: 'reject-row' }, reason, reject));
+      row.append(el('span', {}, approve), el('div', { class: 'reject-row' }, reason, reject));
+      return row;
     }));
   }
 
@@ -104,7 +148,7 @@
         method: 'POST',
         body: JSON.stringify({ username: $('username').value, password: $('password').value })
       });
-      session = { token: result.token, username: result.username, role: result.role };
+      session = { token: result.token, username: result.username, role: result.role, canApprove: result.canApprove };
       sessionStorage.setItem('session', JSON.stringify(session));
       $('password').value = '';
       render();

@@ -19,9 +19,11 @@ public record InvoiceView(
     bool RequiresTwoApprovers,
     bool AwaitingSecondApproval,
     int ApprovalsRequired,
-    int Version)
+    int Version,
+    ApprovalEligibility? YourApproval)
 {
-    public static InvoiceView From(Invoice invoice, ApprovalPolicy policy)
+    public static InvoiceView From(
+        Invoice invoice, ApprovalPolicy policy, ApprovalEligibility? yourApproval = null)
     {
         var requiresTwo = policy.RequiresTwoApprovers(invoice.Amount);
 
@@ -40,6 +42,7 @@ public record InvoiceView(
             requiresTwo,
             requiresTwo && invoice.Status == InvoiceStatus.PendingApproval && invoice.Approvals.Count == 1,
             requiresTwo ? 2 : 1,
-            invoice.Version);
+            invoice.Version,
+            yourApproval);
     }
 }
