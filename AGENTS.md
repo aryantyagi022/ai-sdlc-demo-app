@@ -85,7 +85,7 @@ you is a change nobody reviewed. Each is restricted to the tools it needs.
 | Server | Tools | Notes |
 |---|---|---|
 | `playwright` | 23 browser tools | `browser_evaluate` and `browser_run_code_unsafe` are **deliberately excluded**: arbitrary JS in a browser session is the easiest way to send data somewhere. E2E specs use role locators and never need them. |
-| `mcp-mermaid` | `generate_mermaid_diagram` | Its postinstall runs `playwright install --with-deps chromium`, which attempts `sudo` and fails on a normal account. Chromium from the e2e setup is already enough; install with `--ignore-scripts` if it blocks. |
+| `mcp-mermaid` | `generate_mermaid_diagram` | Launched with `--ignore-scripts` on purpose. Its postinstall runs `playwright install --with-deps chromium`, which needs root; without a TTY `sudo` fails, npm exits 1 and the server dies before the MCP handshake. Skipping it is safe because the e2e setup already installed chromium. The package also ships `build/index.js` without the executable bit, so the launcher resolves the path and runs it through `node`. |
 
 Your session may also reach servers from personal config (Azure, Azure DevOps, GitHub, IDE) that
 are **not** in this file and not controlled by this repo.

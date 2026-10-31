@@ -31,7 +31,13 @@
     },
     "mcp-mermaid": {
       "command": "npx",
-      "args": ["-y", "mcp-mermaid@0.4.1"],
+      "args": [
+        "-y",
+        "--ignore-scripts",
+        "--package=mcp-mermaid@0.4.1",
+        "-c",
+        "exec node \"$(readlink -f \"$(command -v mcp-mermaid)\")\""
+      ],
       "tools": ["generate_mermaid_diagram"]
     }
   }
