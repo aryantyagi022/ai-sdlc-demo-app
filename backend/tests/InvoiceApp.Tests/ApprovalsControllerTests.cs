@@ -5,7 +5,9 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using InvoiceApp.Api.Auth;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using Xunit;
 
@@ -369,4 +371,85 @@ public class ApprovalsControllerTests : IDisposable
         var body = await response.Content.ReadFromJsonAsync<JsonElement>(Json);
         Assert.Equal(expected, body.GetProperty("canApprove").GetBoolean());
     }
+
+    [Fact]
+    public async Task Approve_TwoDirectorsHoldingTheSameVersionGiveExactlyOneSuccessAndOneConflict()
+    {
+        const string invoiceId = "INV-1008";
+        using var racing = _application.WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
+        {
+            services.RemoveAll<InvoiceApp.Domain.IInvoiceRepository>();
+            services.AddSingleton<InvoiceApp.Domain.IInvoiceRepository>(
+                new RendezvousRepository(new InvoiceApp.Api.InMemoryInvoiceRepository()));
+        }));
+        var manager = await SignedInAs(racing, "demo.manager");
+        var firstDirector = await SignedInAs(racing, "demo.director");
+        var secondDirector = await SignedInAs(racing, "demo.director2");
+        (await manager.PostAsync($"/api/approvals/{invoiceId}/approve", null)).EnsureSuccessStatusCode();
+
+        // Both Directors must have read the invoice at the same version before either can save.
+        ((RendezvousRepository)racing.Services.GetRequiredService<InvoiceApp.Domain.IInvoiceRepository>())
+            .HoldTheNextTwoReadsOf(invoiceId);
+
+        var results = await Task.WhenAll(
+            firstDirector.PostAsync($"/api/approvals/{invoiceId}/approve", null),
+            secondDirector.PostAsync($"/api/approvals/{invoiceId}/approve", null));
+
+        // Which Director wins is deliberately not asserted.
+        Assert.Single(results, response => response.StatusCode == HttpStatusCode.OK);
+        Assert.Single(results, response => response.StatusCode == HttpStatusCode.Conflict);
+
+        var stored = Stored(racing, invoiceId);
+        Assert.Equal("Approved", stored.Status);
+        Assert.Equal(2, stored.Approvals.Length);
+        Assert.Equal("demo.manager", stored.Approvals[0]);
+        Assert.Contains(stored.Approvals[1], new[] { "demo.director", "demo.director2" });
+        Assert.Equal(2, stored.Version);
+    }
+}
+
+/// <summary>
+/// Makes two requests meet inside <see cref="GetById"/>: neither read returns until both have been
+/// made, so both callers hold the same version and the save-time version check decides the winner.
+/// A barrier, not a delay, so the outcome does not depend on timing.
+/// </summary>
+file class RendezvousRepository : InvoiceApp.Domain.IInvoiceRepository
+{
+    private readonly InvoiceApp.Domain.IInvoiceRepository _inner;
+    private readonly Barrier _meeting = new(2);
+    private string? _heldInvoiceId;
+    private int _readsStillToHold;
+
+    public RendezvousRepository(InvoiceApp.Domain.IInvoiceRepository inner)
+    {
+        _inner = inner;
+    }
+
+    public void HoldTheNextTwoReadsOf(string invoiceId)
+    {
+        _heldInvoiceId = invoiceId;
+        Volatile.Write(ref _readsStillToHold, 2);
+    }
+
+    public InvoiceApp.Domain.Invoice? GetById(string id)
+    {
+        var invoice = _inner.GetById(id);
+
+        if (id == _heldInvoiceId && Interlocked.Decrement(ref _readsStillToHold) >= 0)
+        {
+            // The timeout only keeps a broken test from hanging; it is never what orders the requests.
+            if (!_meeting.SignalAndWait(TimeSpan.FromSeconds(30)))
+            {
+                throw new TimeoutException("The second competing read never arrived.");
+            }
+        }
+
+        return invoice;
+    }
+
+    public IReadOnlyList<InvoiceApp.Domain.Invoice> GetAll() => _inner.GetAll();
+    public IReadOnlyList<InvoiceApp.Domain.Invoice> GetByIds(IEnumerable<string> ids) => _inner.GetByIds(ids);
+    public InvoiceApp.Domain.Invoice Add(InvoiceApp.Domain.Invoice invoice) => _inner.Add(invoice);
+    public bool Update(InvoiceApp.Domain.Invoice invoice) => _inner.Update(invoice);
+    public bool Remove(string id) => _inner.Remove(id);
 }

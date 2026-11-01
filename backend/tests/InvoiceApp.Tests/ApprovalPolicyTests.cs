@@ -220,4 +220,99 @@ public class ApprovalPolicyTests
 
         Assert.Equal(ApprovalRefusalReason.DuplicateApprover, refusal?.Reason);
     }
+
+    // ---- Phase B: above the single-approver threshold (spec FR-006..FR-008, FR-015) ----
+
+    private const decimal JustAboveThreshold = 500_000.01m;
+
+    private static readonly Approver ASecondDirector = new("demo.director2", "Director");
+    private static readonly Approver ASecondManager = new("demo.manager2", "Manager");
+
+    [Fact]
+    public void RefuseApproval_AtTheThresholdOneDirectorSignatureIsEnough()
+    {
+        var policy = new ApprovalPolicy(Ladder(), "Director");
+
+        Assert.False(policy.RequiresTwoApprovers(500_000.00m));
+        Assert.Null(policy.RefuseApproval(Pending(500_000.00m), ADirector));
+    }
+
+    [Theory]
+    [InlineData("Manager")]
+    [InlineData("Director")]
+    public void RefuseApproval_AboveTheThresholdAllowsTheFirstSignatureFromAManagerOrADirector(string role)
+    {
+        var policy = new ApprovalPolicy(Ladder(), "Director");
+
+        Assert.True(policy.RequiresTwoApprovers(JustAboveThreshold));
+        Assert.Null(policy.RefuseApproval(Pending(JustAboveThreshold), new Approver("demo.first", role)));
+    }
+
+    [Fact]
+    public void RefuseApproval_AboveTheThresholdRefusesAManagerAsSecondSignatureAndNamesAmountAndRole()
+    {
+        var policy = new ApprovalPolicy(Ladder(), "Director");
+        var invoice = Pending(JustAboveThreshold, "demo.clerk", Signed("demo.director", "Director"));
+
+        var refusal = policy.RefuseApproval(invoice, ASecondManager);
+
+        Assert.NotNull(refusal);
+        Assert.Equal(ApprovalRefusalReason.SecondApproverMustBeDirector, refusal.Reason);
+        Assert.Contains("500,000.01", refusal.Message);
+        Assert.Contains("Director", refusal.Message);
+    }
+
+    [Theory]
+    [InlineData("Manager")]
+    [InlineData("Director")]
+    public void RefuseApproval_AboveTheThresholdAllowsADifferentDirectorToSignSecondWhoeverSignedFirst(string firstRole)
+    {
+        var policy = new ApprovalPolicy(Ladder(), "Director");
+        var invoice = Pending(JustAboveThreshold, "demo.clerk", Signed("demo.first", firstRole));
+
+        Assert.Null(policy.RefuseApproval(invoice, ADirector));
+    }
+
+    [Fact]
+    public void RefuseApproval_OnALargeInvoiceAnAdminIsRefusedForRoleEvenWithSignaturesPresent()
+    {
+        var policy = new ApprovalPolicy(Ladder(), "Director");
+        var invoice = Pending(JustAboveThreshold, "demo.admin", Signed("demo.manager", "Manager"));
+
+        var refusal = policy.RefuseApproval(invoice, new Approver("demo.admin", "Admin"));
+
+        Assert.Equal(ApprovalRefusalReason.RoleCannotApprove, refusal?.Reason);
+    }
+
+    [Fact]
+    public void RefuseApproval_OnALargeInvoiceTheSubmittingDirectorWhoAlreadySignedIsRefusedAsSelfApproval()
+    {
+        var policy = new ApprovalPolicy(Ladder(), "Director");
+        var invoice = Pending(JustAboveThreshold, "demo.director", Signed("demo.director", "Director"));
+
+        var refusal = policy.RefuseApproval(invoice, ADirector);
+
+        Assert.Equal(ApprovalRefusalReason.SelfApprovalNotAllowed, refusal?.Reason);
+    }
+
+    [Fact]
+    public void RefuseApproval_OnALargeInvoiceAManagerWhoSignedFirstIsRefusedAsDuplicateNotAsWrongSecondRole()
+    {
+        var policy = new ApprovalPolicy(Ladder(), "Director");
+        var invoice = Pending(JustAboveThreshold, "demo.clerk", Signed("demo.manager", "Manager"));
+
+        var refusal = policy.RefuseApproval(invoice, AManager);
+
+        Assert.Equal(ApprovalRefusalReason.DuplicateApprover, refusal?.Reason);
+    }
+
+    [Fact]
+    public void RefuseApproval_OnALargeInvoiceADirectorWhoSignedFirstCannotSignSecondToo()
+    {
+        var policy = new ApprovalPolicy(Ladder(), "Director");
+        var invoice = Pending(JustAboveThreshold, "demo.clerk", Signed("demo.director", "Director"));
+
+        Assert.Equal(ApprovalRefusalReason.DuplicateApprover, policy.RefuseApproval(invoice, ADirector)?.Reason);
+        Assert.Null(policy.RefuseApproval(invoice, ASecondDirector));
+    }
 }

@@ -763,6 +763,98 @@ public class ApprovalServiceTests
 
         Assert.Equal(InvoiceStatus.Approved, result.Status);
     }
+
+    // ---- Phase B: the two-approver flow, with every refusal proven to change nothing ----
+
+    [Fact]
+    public void Approve_FullTwoApproverFlowOnALargeInvoiceWithEveryRefusedStepLeavingItUnchanged()
+    {
+        var (service, repository, log) = Harness(
+            InvoiceWith("INV-1", InvoiceStatus.PendingApproval, 600_000m, submittedBy: "demo.director2"));
+
+        var afterFirst = service.Approve("INV-1", AManager);
+
+        Assert.Equal(InvoiceStatus.PendingApproval, afterFirst.Status);
+        Assert.Single(afterFirst.Approvals);
+        Assert.Equal("demo.manager", afterFirst.FirstApprovedBy);
+        Assert.Null(afterFirst.DecidedBy);
+        Assert.Null(afterFirst.DecidedAt);
+        Assert.Equal(1, repository.UpdateCount);
+
+        var refusedSteps = new (Approver Approver, ApprovalRefusalReason Reason)[]
+        {
+            (AManager, ApprovalRefusalReason.DuplicateApprover),
+            (ASecondManager, ApprovalRefusalReason.SecondApproverMustBeDirector),
+            (ASecondDirector, ApprovalRefusalReason.SelfApprovalNotAllowed),
+            (AnAdmin, ApprovalRefusalReason.RoleCannotApprove),
+        };
+
+        foreach (var (approver, reason) in refusedSteps)
+        {
+            var before = InvoiceAssert.Capture(repository, "INV-1");
+
+            var refusal = Assert.Throws<ApprovalRefusedException>(() => service.Approve("INV-1", approver));
+
+            Assert.Equal(reason, refusal.Reason);
+            InvoiceAssert.AssertUnchanged(repository, "INV-1", before);
+        }
+
+        Assert.Equal(refusedSteps.Length, log.Entries.Count);
+
+        var afterSecond = service.Approve("INV-1", ADirector);
+
+        Assert.Equal(InvoiceStatus.Approved, afterSecond.Status);
+        Assert.Equal(2, afterSecond.Approvals.Count);
+        Assert.Equal("demo.director", afterSecond.DecidedBy);
+        Assert.NotNull(afterSecond.DecidedAt);
+        Assert.Equal(2, repository.UpdateCount);
+    }
+
+    [Fact]
+    public void Approve_AThirdSignatureOnAnAlreadyApprovedLargeInvoiceIsALifecycleConflictAndChangesNothing()
+    {
+        var (service, repository, _) = Harness(
+            InvoiceWith("INV-1", InvoiceStatus.PendingApproval, 600_000m));
+        service.Approve("INV-1", AManager);
+        service.Approve("INV-1", ADirector);
+        var before = InvoiceAssert.Capture(repository, "INV-1");
+
+        Assert.Throws<InvalidOperationException>(() => service.Approve("INV-1", ASecondDirector));
+
+        InvoiceAssert.AssertUnchanged(repository, "INV-1", before);
+    }
+
+    [Theory]
+    [InlineData("Demo.Director")]
+    [InlineData("demo.director ")]
+    [InlineData(" demo.director")]
+    public void Approve_ANearMissOfTheFirstApproversUsernameIsADifferentPersonWhoMaySignSecond(string username)
+    {
+        var (service, _, _) = Harness(InvoiceWith("INV-1", InvoiceStatus.PendingApproval, AboveDualThreshold));
+        service.Approve("INV-1", ADirector);
+
+        var result = service.Approve("INV-1", new Approver(username, Director));
+
+        Assert.Equal(InvoiceStatus.Approved, result.Status);
+    }
+
+    [Fact]
+    public void Approve_ASecondSignatureThatLosesTheVersionRaceChangesNothingAndIsNotLoggedAsARefusal()
+    {
+        var repository = new FakeInvoiceRepository(
+            InvoiceWith("INV-1", InvoiceStatus.PendingApproval, AboveDualThreshold));
+        var log = new FakeRefusalLog();
+        var service = new ApprovalService(new StaleReadRepository(repository), Policy(), log);
+        service.Approve("INV-1", AManager);
+        var before = InvoiceAssert.Capture(repository, "INV-1");
+
+        Assert.Throws<InvalidOperationException>(() => service.Approve("INV-1", ADirector));
+
+        InvoiceAssert.AssertUnchanged(repository, "INV-1", before);
+        Assert.Equal("demo.manager", Assert.Single(repository.GetById("INV-1")!.Approvals).Username);
+        Assert.Equal(1, repository.UpdateCount);
+        Assert.Empty(log.Entries);
+    }
 }
 
 /// <summary>

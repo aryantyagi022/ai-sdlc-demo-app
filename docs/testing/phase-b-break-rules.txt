@@ -1,0 +1,34 @@
+Phase B break-the-rule results (T037)
+=====================================
+These are manual, isolated-copy results, NOT Stryker mutation scores.
+Each break was applied to a temporary copy of backend/ (never the repository), the full
+suite was run, and the file was restored. No Phase B test was red before the breaks;
+Phase B behaviour already existed from Phase A, so every new test is [EXISTING].
+
+A. Captured original run (copy /tmp/mutC, 135 tests, before the race test was rewritten)
+
+  Break                                                        Failing tests   Result
+  a. Second approver accepts any role                           5               killed
+  b. Remove the shared duplicate-approver check                 11              killed
+  c. Manager cannot sign first                                  16              killed
+  d. Complete after one signature above the threshold           22              killed
+  e1. FakeInvoiceRepository.Update ignores the version          2               killed
+      (Approve_RefusesToSaveOverANewerVersionOfTheInvoice,
+       Approve_ASecondSignatureThatLosesTheVersionRace...)
+  e2. InMemoryInvoiceRepository.Update ignores the version      1               killed
+      (the old Task.WhenAll race test only; it failed in that run, but that test
+       was not guaranteed to overlap, which is why it was rewritten)
+  f. Threshold comparison > changed to >=                       3               killed
+  g. Username comparison Ordinal -> OrdinalIgnoreCase           3               killed
+
+B. Rerun after the test change (copy /tmp/mutE)
+
+  The race test was rewritten as
+  Approve_TwoDirectorsHoldingTheSameVersionGiveExactlyOneSuccessAndOneConflict,
+  using a Barrier(2) so both Directors read the same version before either saves.
+
+  - Unmodified code: 20 of 20 repeated runs passed; full suite 135 passed.
+  - e2 repeated: InMemoryInvoiceRepository.Update with the version check removed
+    ("|| _invoices[index].Version != invoice.Version" deleted):
+    5 of 5 runs failed with "Assert.Single() Failure: The collection contained 2
+    matching items" (both Directors received 200).
