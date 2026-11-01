@@ -1,0 +1,11 @@
+diff --git a/backend/src/InvoiceApp.Domain/ApprovalPolicy.cs b/backend/src/InvoiceApp.Domain/ApprovalPolicy.cs
+index bc190da..a5e7cf1 100644
+--- a/backend/src/InvoiceApp.Domain/ApprovalPolicy.cs
++++ b/backend/src/InvoiceApp.Domain/ApprovalPolicy.cs
+@@ -134,5 +134,5 @@ public class ApprovalPolicy
+ 
+     /// <summary>Usernames compare exactly: ordinal, case-sensitive, no trimming.</summary>
+     private static bool IsSameUser(string? left, string? right) =>
+-        left is not null && right is not null && string.Equals(left, right, StringComparison.Ordinal);
++        left is not null && right is not null && string.Equals(left, right, StringComparison.OrdinalIgnoreCase);
+ }

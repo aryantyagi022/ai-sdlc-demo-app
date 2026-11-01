@@ -1,0 +1,13 @@
+diff --git a/backend/src/InvoiceApp.Domain/ApprovalPolicy.cs b/backend/src/InvoiceApp.Domain/ApprovalPolicy.cs
+index bc190da..362a9ce 100644
+--- a/backend/src/InvoiceApp.Domain/ApprovalPolicy.cs
++++ b/backend/src/InvoiceApp.Domain/ApprovalPolicy.cs
+@@ -112,7 +112,7 @@ public class ApprovalPolicy
+ 
+         var limit = LimitFor(approver.Role)!.Value;
+ 
+-        return invoice.Amount > limit
++        return invoice.Amount >= limit
+             ? new ApprovalRefusal(
+                 ApprovalRefusalReason.AboveApprovalLimit,
+                 $"{approver.Role} may approve up to {limit:N2}; invoice {invoice.Id} is " +

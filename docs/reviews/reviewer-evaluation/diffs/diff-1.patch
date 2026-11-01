@@ -1,0 +1,19 @@
+diff --git a/backend/src/InvoiceApp.Domain/ApprovalService.cs b/backend/src/InvoiceApp.Domain/ApprovalService.cs
+index 884f164..8c20a3d 100644
+--- a/backend/src/InvoiceApp.Domain/ApprovalService.cs
++++ b/backend/src/InvoiceApp.Domain/ApprovalService.cs
+@@ -98,11 +98,11 @@ public class ApprovalService
+             return ApprovalEligibility.NotOpenForDecision(NotPendingMessage(invoice));
+         }
+ 
+-        var refusal = _policy.RefuseApproval(invoice, approver);
++        var approvalRefusal = _policy.RefuseApproval(invoice, approver);
+ 
+-        return refusal is null
++        return approvalRefusal is null
+             ? ApprovalEligibility.Allowed
+-            : ApprovalEligibility.Refused(refusal.Reason, refusal.Message);
++            : ApprovalEligibility.Refused(approvalRefusal.Reason, approvalRefusal.Message);
+     }
+ 
+     /// <summary>

@@ -17,7 +17,8 @@ Invoice approval authority now depends on role and amount. Specification: `specs
 - Admin cannot approve or reject. Limits come only from `Approval:RoleLimits`.
 - A refused attempt returns a reason code (`SelfApprovalNotAllowed`, `DuplicateApprover`, `AboveApprovalLimit`,
   `SecondApproverMustBeDirector`, `RoleCannotApprove`) and leaves the invoice unchanged. Refusals go to a separate log.
-- Flow with file and symbol citations: `docs/diagrams/approval-flow.md`.
+- Flow with file and symbol citations: `docs/diagrams/approval-flow.md` (rendered: [`approval-flow.svg`](docs/diagrams/approval-flow.svg)).
+  Rendering note: the SVG is 4037×4225 px, so it is large at native size. Some yellow Mermaid note boxes are narrower than their text and the text overflows the box edge; the text is still readable. The Mermaid source was left unchanged, and the SVG was not regenerated to fix this.
 
 ## 2. Requirements and proof
 
@@ -30,7 +31,7 @@ Invoice approval authority now depends on role and amount. Specification: `specs
 | Agent mistakes and corrections | Section 6 | covered (agent-reported, see section 6) |
 | All three mutation scores | Section 7 | covered (three separate runs) |
 | Review verdicts | Section 8, `docs/reviews/review-findings.md` | covered |
-| Reviewer evaluation | Section 9 | covered in text; raw outputs and key are in `/tmp` **[not in repo]** |
+| Reviewer evaluation | Section 9 | summary, outputs, patches and key in `docs/reviews/reviewer-evaluation/`; the 2/2 score is chat-only **[not in repo]** |
 | Quote human decisions exactly | Section 4 | covered; checked against the log |
 | Demo video, 8-10 minutes | Section 12 | **open**: not yet recorded; link is a TODO placeholder |
 
@@ -214,10 +215,10 @@ threshold (`ApprovalPolicy.cs:128`), and the threshold is the highest configured
 Race-test determinism was not independently verified during review **[uncertain]**.
 The same F1-F10 table is recorded as repository evidence in `docs/reviews/review-findings.md`.
 
-## 9. Reviewer evaluation (`pr-reviewer`, 12 fresh-context runs)
+## 9. Reviewer evaluation (`pr-reviewer`, 12 runs)
 
 Method: three small diffs with one planted bug each plus one clean diff, three runs each, applied only to a clone under `/tmp`, never to the feature branch.
-Each reviewer was given the diff inline and the prompt "Review this PR against our checklist. Report findings by severity with file and line, suggest a fix for each, and say what you are unsure about."
+Each reviewer was given the diff inline and the prompt "Review this PR against our checklist. Report findings by severity with file and line, suggest a fix for each, and say what you are unsure about." (The prompt wording is from the session record **[not in repo]**.)
 
 | Diff | Change | Runs | Human score |
 |---|---|---|---|
@@ -229,8 +230,8 @@ Each reviewer was given the diff inline and the prompt "Review this PR against o
 Human assessment, in the user's words (chat, not in the log): "My assessment is 2/2 for every run: all 9 planted bugs were detected, and all 3 clean-diff reviews correctly identified the harmless rename."
 
 Limits: small diffs against rules written in `AGENTS.md`, three runs per diff, the diff supplied inline, no tests executed (the reviewer has no shell),
-and several runs said they had not opened `AGENTS.md` or the spec. 12 of 12 is not a miss rate.
-Outputs, patches and the answer key are in `/tmp/pr-eval/` and `/tmp/pr-eval-key/` **[not in repo]**.
+and two runs (R02, R11) said they had not opened `AGENTS.md` or the spec. 12 of 12 is not a miss rate.
+Outputs, patches and the answer key: [`docs/reviews/reviewer-evaluation/`](docs/reviews/reviewer-evaluation/README.md) (copied verbatim from the original working files). The 2/2 score itself is **[not in repo]**: it was given in chat.
 
 ## 10. Agents, skills and tools actually used
 
@@ -271,9 +272,9 @@ Counts are hook records, not distinct runs. The seven custom agents in `.github/
 | AI interaction log | `ai-logs/ai-interactions.jsonl` | committed, redacted snapshot |
 | Human decisions | `ai-logs/human-decisions.jsonl` | committed (L31-39 back-filled) |
 | Context experiment | `ai-logs/context-experiment/` | committed |
-| Flow diagram | `docs/diagrams/approval-flow.md` | committed (`9169ff3`) |
+| Flow diagram | `docs/diagrams/approval-flow.md` (Mermaid source, committed `9169ff3`); `docs/diagrams/approval-flow.svg` (rendered from it, 4037×4225 px; see the note in section 1) | committed |
 | Review verdicts F1-F10 | `docs/reviews/review-findings.md` | committed with this write-up |
-| Reviewer evaluation | `/tmp/pr-eval*` | **not in repo** |
+| Reviewer evaluation | `docs/reviews/reviewer-evaluation/` | outputs, patches, key and summary in repo; score is chat-only |
 | Evaluation scoring | chat | **not in log** |
 | Demo video (8-10 minutes) | link | placeholder, not recorded |
 
