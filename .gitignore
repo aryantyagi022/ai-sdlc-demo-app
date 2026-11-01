@@ -13,3 +13,6 @@ playwright-report/
 ai-logs/raw/
 ai-logs/.state/
 ai-logs/*.lock
+
+# Playwright MCP session output
+.playwright-mcp/
