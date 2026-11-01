@@ -33,7 +33,7 @@ Invoice approval authority now depends on role and amount. Specification: `specs
 | Review verdicts | Section 8, `docs/reviews/review-findings.md` | covered |
 | Reviewer evaluation | Section 9 | summary, outputs, patches and key in `docs/reviews/reviewer-evaluation/`; the 2/2 score is chat-only **[not in repo]** |
 | Quote human decisions exactly | Section 4 | covered; checked against the log |
-| Demo video, 8-10 minutes | Section 12 | **open**: not yet recorded; link is a TODO placeholder |
+| Demo video, 8-10 minutes | Section 12 | recorded and linked; reviewer access to be confirmed |
 
 ### 2B. Feature specification requirements (FR/SC)
 
@@ -258,7 +258,8 @@ Counts are hook records, not distinct runs. The seven custom agents in `.github/
 
 ## 12. Demo video
 
-> **Placeholder.** Required length: **8-10 minutes**. Link: 'https://nagarro-my.sharepoint.com/:v:/p/aryan_tyagi/IQB9Zpjhwbi9Q6n33UFB7_VTAUcvDQX9_mcviRr94rhD3Vo?nav=eyJyZWZlcnJhbEluZm8iOnsicmVmZXJyYWxBcHAiOiJPbmVEcml2ZUZvckJ1c2luZXNzIiwicmVmZXJyYWxBcHBQbGF0Zm9ybSI6IldlYiIsInJlZmVycmFsTW9kZSI6InZpZXciLCJyZWZlcnJhbFZpZXciOiJNeUZpbGVzTGlua0NvcHkifX0&e=iJNT2d'. Not recorded yet.
+> The demo is recorded (required length **8-10 minutes**; actual length not verified from this repository **[uncertain]**): [Demo video](https://nagarro-my.sharepoint.com/:v:/p/aryan_tyagi/IQB9Zpjhwbi9Q6n33UFB7_VTAUcvDQX9_mcviRr94rhD3Vo?nav=eyJyZWZlcnJhbEluZm8iOnsicmVmZXJyYWxBcHAiOiJPbmVEcml2ZUZvckJ1c2luZXNzIiwicmVmZXJyYWxBcHBQbGF0Zm9ybSI6IldlYiIsInJlZmVycmFsTW9kZSI6InZpZXciLCJyZWZlcnJhbFZpZXciOiJNeUZpbGVzTGlua0NvcHkifX0&e=iJNT2d).
+> External reviewer access is **unconfirmed**: an unauthenticated request to this link returned 403.
 
 ## 13. Evidence checklist
 
@@ -276,7 +277,7 @@ Counts are hook records, not distinct runs. The seven custom agents in `.github/
 | Review verdicts F1-F10 | `docs/reviews/review-findings.md` | committed with this write-up |
 | Reviewer evaluation | `docs/reviews/reviewer-evaluation/` | outputs, patches, key and summary in repo; score is chat-only |
 | Evaluation scoring | chat | **not in log** |
-| Demo video (8-10 minutes) | 'https://nagarro-my.sharepoint.com/:v:/p/aryan_tyagi/IQB9Zpjhwbi9Q6n33UFB7_VTAUcvDQX9_mcviRr94rhD3Vo?nav=eyJyZWZlcnJhbEluZm8iOnsicmVmZXJyYWxBcHAiOiJPbmVEcml2ZUZvckJ1c2luZXNzIiwicmVmZXJyYWxBcHBQbGF0Zm9ybSI6IldlYiIsInJlZmVycmFsTW9kZSI6InZpZXciLCJyZWZlcnJhbFZpZXciOiJNeUZpbGVzTGlua0NvcHkifX0&e=iJNT2d' |
+| Demo video (8-10 minutes) | section 12 link | recorded and linked; reviewer access to be confirmed |
 
 ## 14. How to reproduce
 
