@@ -1,0 +1,78 @@
+Stryker.NET mutation report - AFTER Phases A-C and one Polish test addition
+Project: backend/src/InvoiceApp.Domain
+Tests:   backend/tests/InvoiceApp.Tests (136 tests, all passing)
+Stryker: 4.13.0 on .NET 8.0
+Run:     final run is output directory StrykerOutput/2026-11-01.11-30-09 (local time, +05:30); its
+         report file was written 2026-11-01 11:31:05. The report JSON itself carries no date field,
+         so the date comes from the directory name and file time, not from report metadata. The
+         StrykerOutput directory is git-ignored and is not part of the commit.
+Command: cd backend/src/InvoiceApp.Domain &&
+         dotnet stryker --test-project ../../tests/InvoiceApp.Tests/InvoiceApp.Tests.csproj \
+                        --reporter cleartext --reporter json
+         (the bare `dotnet stryker` in the baseline era no longer finds a test project)
+
+Score = killed / (killed + survived + no coverage); ignored and compile-error mutants excluded.
+
+CAVEAT ON THE BASELINE COMPARISON
+  The baseline (before.txt) ran against 7 tests and before approval logic moved from ApprovalService
+  into ApprovalPolicy. The mutant populations therefore differ: the baseline has no ApprovalPolicy,
+  ApprovalRefusal, ApprovalEligibility or InvoiceView mutants, and ApprovalService now holds far
+  fewer of the rules. The scores are indicative, not a strict like-for-like comparison.
+
+OVERALL MUTATION SCORE: 72.66 %   (baseline 30.77 %)
+  Killed 93, Survived 17, No coverage 18, Ignored 31, CompileError 12
+
+PER FILE
+  File                     Score    Killed  Survived  NoCoverage   Baseline
+  ApprovalService.cs       83.33 %      35         6           1    60.00 %
+  ApprovalPolicy.cs        94.64 %      53         3           0    (new file)
+  ApprovalRefusal.cs      100.00 %       1         0           0    (new file)
+  ApprovalEligibility.cs   33.33 %       1         2           0    (new file)
+  InvoiceView.cs           20.00 %       1         4           0    (new file)
+  Invoice.cs               50.00 %       2         2           0     0.00 %
+  DiscountCalculator.cs     0.00 %       0         0          17     0.00 %  (known, out of scope)
+
+BEFORE/AFTER THE POLISH TEST
+  Before adding Constructor_ExplainsEachMisconfigurationInItsOwnWords and the duplicate-message
+  assertion: overall 67.19 %, ApprovalPolicy.cs 82.14 % (8 survived, 2 no coverage).
+  After: ApprovalPolicy.cs 94.64 % (3 survived).
+
+REMAINING SURVIVORS (not all fixed; verdicts)
+  ApprovalPolicy.cs 46-47  deferred: prose of the "second-approver role has no limit" message;
+                           the role name and known roles that matter are asserted.
+  ApprovalPolicy.cs 137    equivalent BY ARGUMENT ONLY, not experimentally proven: the surviving mutant is
+                           `(left is not null || right is not null) && Equals(left, right)`. Equals is true
+                           only when left == right, so both are null or both non-null; both-null gives
+                           false in the mutant and in the original. No test was written or run to
+                           confirm this, and Stryker cannot confirm it (the mutant survived).
+  ApprovalService.cs 28,73,149,157,160  deferred: exception message text for lifecycle (409) and
+                           not-found (404) paths; status codes are tested, wording is not.
+  ApprovalService.cs 97    deferred: a SURVIVING block-removal mutant in the not-pending branch of
+                           EligibilityFor (the branch that returns NotOpenForDecision). A test reaches
+                           this code path, but none fails when the block is removed, so the behaviour
+                           is not pinned at unit level.
+  ApprovalService.cs 92    deferred: the only NO-COVERAGE mutant, a block-removal in the role-refusal
+                           branch of EligibilityFor (the branch that returns Refused for a role that
+                           cannot approve). No unit test reaches this branch, so it is untested at
+                           unit level. Whether the Playwright or controller suites exercise it was
+                           not checked, and no test was run to demonstrate that it would be caught.
+  ApprovalEligibility.cs 9,16, InvoiceView.cs 43-44  deferred: UI-facing projection; covered by
+                           the Playwright suite (e2e/tests), which Stryker does not run.
+  Invoice.cs 5-6           equivalent BY ARGUMENT ONLY: default values of string properties that
+                           are always set in practice; not tested.
+  DiscountCalculator.cs    out of scope per AGENTS.md (no tests, 17 no-coverage mutants).
+
+BREAK-VERIFICATION OF THE POLISH TEST (isolated copy of backend/, hand-applied edits, not Stryker)
+  Unchanged copy: ApprovalPolicyTests 37 passed.
+  ApprovalPolicy.cs:16 empty-ladder message -> "": Constructor_ExplainsEachMisconfigurationInItsOwnWords
+      failed (Assert.Contains: sub-string not found).
+  ApprovalPolicy.cs:105 duplicate message tail -> "": RefuseApproval_RefusesTheSameUserTwiceEvenWhen
+      TheAmountIsAlsoAboveTheirLimit failed (Assert.Contains: sub-string not found).
+  ApprovalPolicy.cs:16 ParamName roleLimits -> secondApproverRole: the same constructor test failed
+      (expected "roleLimits", actual "secondApproverRole").
+  Restored: 37 passed.
+  Not mutated: the other three constructor messages and the ParamName on the other throw sites, so
+  those assertions are not individually proven load-bearing.
+
+Not verified: survivors marked "equivalent" were reasoned about, not proven; no test was written
+to demonstrate they cannot be killed.

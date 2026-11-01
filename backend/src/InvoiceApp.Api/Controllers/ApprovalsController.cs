@@ -6,23 +6,39 @@ namespace InvoiceApp.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[RequireRole("Approver", "Admin")]
 public class ApprovalsController : ApiControllerBase
 {
-    private readonly ApprovalService _approvals;
+    // No [RequireRole] here on purpose: which roles may approve is owned by Approval:RoleLimits
+    // and enforced by ApprovalService. Repeating the list here would be a second copy that
+    // silently blocks any role added to configuration.
 
-    public ApprovalsController(ApprovalService approvals)
+    private readonly ApprovalService _approvals;
+    private readonly ApprovalPolicy _policy;
+
+    public ApprovalsController(ApprovalService approvals, ApprovalPolicy policy)
     {
         _approvals = approvals;
+        _policy = policy;
     }
 
-    public record RejectRequest(string Reason);
+    public record RejectRequest(string? Reason);
 
     [HttpPost("{invoiceId}/approve")]
-    public ActionResult<Invoice> Approve(string invoiceId) =>
-        Handle(() => _approvals.Approve(invoiceId, HttpContext.GetSession().Username));
+    public ActionResult<InvoiceView> Approve(string invoiceId) =>
+        Handle(() => View(_approvals.Approve(invoiceId, CurrentApprover())));
 
+    // The body is optional and the reason nullable so a missing reason reaches the service, where
+    // the role check runs first (403) and only then the reason check (400).
     [HttpPost("{invoiceId}/reject")]
-    public ActionResult<Invoice> Reject(string invoiceId, [FromBody] RejectRequest request) =>
-        Handle(() => _approvals.Reject(invoiceId, HttpContext.GetSession().Username, request.Reason));
+    public ActionResult<InvoiceView> Reject(string invoiceId, [FromBody] RejectRequest? request = null) =>
+        Handle(() => View(_approvals.Reject(invoiceId, CurrentApprover(), request?.Reason ?? string.Empty)));
+
+    private InvoiceView View(Invoice invoice) =>
+        InvoiceView.From(invoice, _policy, _approvals.EligibilityFor(invoice, CurrentApprover()));
+
+    private Approver CurrentApprover()
+    {
+        var session = HttpContext.GetSession();
+        return new Approver(session.Username, session.Role);
+    }
 }

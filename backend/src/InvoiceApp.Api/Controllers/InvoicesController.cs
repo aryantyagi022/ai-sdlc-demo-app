@@ -10,17 +10,19 @@ public class InvoicesController : ApiControllerBase
 {
     private readonly IInvoiceRepository _repository;
     private readonly ApprovalService _approvals;
+    private readonly ApprovalPolicy _policy;
 
-    public InvoicesController(IInvoiceRepository repository, ApprovalService approvals)
+    public InvoicesController(IInvoiceRepository repository, ApprovalService approvals, ApprovalPolicy policy)
     {
         _repository = repository;
         _approvals = approvals;
+        _policy = policy;
     }
 
     public record CreateInvoiceRequest(string CustomerName, decimal Amount);
 
     [HttpGet]
-    public ActionResult<IReadOnlyList<Invoice>> GetAll([FromQuery] string? status)
+    public ActionResult<IReadOnlyList<InvoiceView>> GetAll([FromQuery] string? status)
     {
         var invoices = _repository.GetAll();
 
@@ -34,14 +36,14 @@ public class InvoicesController : ApiControllerBase
             invoices = invoices.Where(i => i.Status == parsed).ToList();
         }
 
-        return Ok(invoices);
+        return Ok(invoices.Select(ViewFor).ToList());
     }
 
     [HttpGet("{id}")]
-    public ActionResult<Invoice> GetById(string id)
+    public ActionResult<InvoiceView> GetById(string id)
     {
         var invoice = _repository.GetById(id);
-        return invoice is null ? NotFound() : Ok(invoice);
+        return invoice is null ? NotFound() : Ok(ViewFor(invoice));
     }
 
     [HttpPost]
@@ -67,7 +69,16 @@ public class InvoicesController : ApiControllerBase
     }
 
     [HttpPost("{id}/submit")]
-    public ActionResult<Invoice> Submit(string id) => Handle(() => _approvals.Submit(id));
+    public ActionResult<InvoiceView> Submit(string id) =>
+        Handle(() => ViewFor(_approvals.Submit(id, HttpContext.GetSession().Username)));
+
+    /// <summary>Projects an invoice, telling the caller whether they themselves could approve it.</summary>
+    private InvoiceView ViewFor(Invoice invoice)
+    {
+        var session = HttpContext.GetSession();
+        var approver = new Approver(session.Username, session.Role);
+        return InvoiceView.From(invoice, _policy, _approvals.EligibilityFor(invoice, approver));
+    }
 
     [HttpDelete("{id}")]
     [RequireRole("Admin")]

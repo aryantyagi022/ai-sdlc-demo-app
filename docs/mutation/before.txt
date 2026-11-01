@@ -1,0 +1,108 @@
+Stryker.NET mutation report - BASELINE (before changes)
+Project: backend/src/InvoiceApp.Domain
+Tests:   backend/tests/InvoiceApp.Tests (7 tests, all passing)
+Stryker: 4.13.0 on .NET 8.0.427
+Date:    2026-10-30
+
+OVERALL MUTATION SCORE: 30.77 %
+  Killed      12
+  Survived    10
+  No coverage 17
+  Timeout     0
+  Ignored     12
+  Total       51
+
+PER FILE
+  File                     Score    Killed  Survived  NoCoverage
+  ApprovalService.cs       60.00 %      12         8           0
+  DiscountCalculator.cs     0.00 %       0         0          17
+  Invoice.cs                0.00 %       0         2           0
+  IInvoiceRepository.cs       N/A        0         0           0
+  InvoiceStatus.cs            N/A        0         0           0
+
+=== ApprovalService.cs - 8 mutant(s) not killed ===
+  [Survived] line 23  String mutation
+      source:      $"Invoice {invoiceId} is {invoice.Status}; only drafts can be submitted.");
+      replaced by: $""
+  [Survived] line 27  Statement mutation
+      source:      _repository.Update(invoice);
+      replaced by: ;
+  [Survived] line 39  Statement mutation
+      source:      _repository.Update(invoice);
+      replaced by: ;
+  [Survived] line 47  String mutation
+      source:      throw new ArgumentException("A reason is required to reject an invoice.", nameof(reason));
+      replaced by: ""
+  [Survived] line 51  Statement mutation
+      source:      EnsurePending(invoice);
+      replaced by: ;
+  [Survived] line 57  Statement mutation
+      source:      _repository.Update(invoice);
+      replaced by: ;
+  [Survived] line 63  String mutation
+      source:      ?? throw new KeyNotFoundException($"Invoice {invoiceId} was not found.");
+      replaced by: $""
+  [Survived] line 70  String mutation
+      source:      $"Invoice {invoice.Id} is {invoice.Status}; only pending invoices can be decided.");
+      replaced by: $""
+
+=== DiscountCalculator.cs - 17 mutant(s) not killed ===
+  [NoCoverage] line 8  Equality mutation
+      source:      if (quantity >= 100) return 0.15m;
+      replaced by: quantity < 100
+  [NoCoverage] line 8  Equality mutation
+      source:      if (quantity >= 100) return 0.15m;
+      replaced by: quantity > 100
+  [NoCoverage] line 8  Negate expression
+      source:      if (quantity >= 100) return 0.15m;
+      replaced by: !(quantity >= 100)
+  [NoCoverage] line 9  Equality mutation
+      source:      if (quantity >= 50) return 0.10m;
+      replaced by: quantity < 50
+  [NoCoverage] line 9  Equality mutation
+      source:      if (quantity >= 50) return 0.10m;
+      replaced by: quantity > 50
+  [NoCoverage] line 9  Negate expression
+      source:      if (quantity >= 50) return 0.10m;
+      replaced by: !(quantity >= 50)
+  [NoCoverage] line 10  Equality mutation
+      source:      if (quantity >= 10) return 0.05m;
+      replaced by: quantity < 10
+  [NoCoverage] line 10  Equality mutation
+      source:      if (quantity >= 10) return 0.05m;
+      replaced by: quantity > 10
+  [NoCoverage] line 10  Negate expression
+      source:      if (quantity >= 10) return 0.05m;
+      replaced by: !(quantity >= 10)
+  [NoCoverage] line 16  Linq method mutation (Min() to Max())
+      source:      return Math.Min(yearsAsCustomer * 0.01m, 0.10m);
+      replaced by: Math.Max
+  [NoCoverage] line 16  Arithmetic mutation
+      source:      return Math.Min(yearsAsCustomer * 0.01m, 0.10m);
+      replaced by: yearsAsCustomer / 0.01m
+  [NoCoverage] line 21  Arithmetic mutation
+      source:      var discount = QuantityDiscount(quantity) + LoyaltyDiscount(yearsAsCustomer);
+      replaced by: QuantityDiscount(quantity) - LoyaltyDiscount(yearsAsCustomer)
+  [NoCoverage] line 23  Equality mutation
+      source:      if (customerType == "Nonprofit")
+      replaced by: customerType != "Nonprofit"
+  [NoCoverage] line 23  String mutation
+      source:      if (customerType == "Nonprofit")
+      replaced by: ""
+  [NoCoverage] line 25  AddAssignmentExpression to SubtractAssignmentExpression mutation
+      source:      discount += 0.05m;
+      replaced by: discount -= 0.05m
+  [NoCoverage] line 33  Arithmetic mutation
+      source:      return Math.Round(amount * (1 - discountRate), 2);
+      replaced by: amount / (1 - discountRate)
+  [NoCoverage] line 33  Arithmetic mutation
+      source:      return Math.Round(amount * (1 - discountRate), 2);
+      replaced by: 1 + discountRate
+
+=== Invoice.cs - 2 mutant(s) not killed ===
+  [Survived] line 5  String mutation
+      source:      public string Id { get; set; } = string.Empty;
+      replaced by: "Stryker was here!"
+  [Survived] line 6  String mutation
+      source:      public string CustomerName { get; set; } = string.Empty;
+      replaced by: "Stryker was here!"

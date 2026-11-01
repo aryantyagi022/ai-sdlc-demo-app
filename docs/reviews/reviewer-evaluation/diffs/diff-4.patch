@@ -1,0 +1,16 @@
+diff --git a/backend/src/InvoiceApp.Domain/ApprovalService.cs b/backend/src/InvoiceApp.Domain/ApprovalService.cs
+index 884f164..1549b4c 100644
+--- a/backend/src/InvoiceApp.Domain/ApprovalService.cs
++++ b/backend/src/InvoiceApp.Domain/ApprovalService.cs
+@@ -63,9 +63,9 @@ public class ApprovalService
+     /// </summary>
+     public Invoice Reject(string invoiceId, Approver approver, string reason)
+     {
+-        RefuseIfNotAuthorised(invoiceId, approver, DecisionAction.Reject);
+-
+         var invoice = Find(invoiceId);
++
++        RefuseIfNotAuthorised(invoiceId, approver, DecisionAction.Reject);
+         EnsurePending(invoice);
+ 
+         if (string.IsNullOrWhiteSpace(reason))

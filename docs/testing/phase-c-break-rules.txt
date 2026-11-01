@@ -1,0 +1,27 @@
+Phase C break-the-rule results (T040, T042, T044)
+=================================================
+Manual, isolated-copy results (/tmp/uiF), NOT Stryker mutation scores. Each break was applied to a
+temporary copy of backend/ and e2e/, the full Playwright suite (17 specs) was run, and the file was
+restored. The repository files were never broken.
+
+Baseline before the additions: 13 passed. After additions and the UI change: 17 passed.
+
+Red run of the four new specs, before the UI change (original captured output):
+  - an over-limit approval the page wrongly offered ...   failed: expected "None", received "0 of 1"
+    (a wrong expectation in the test; corrected, no UI change)
+  - a reviewer sees who submitted an invoice and who has signed it so far
+    failed by assertion: "Submitted by ..." not found on the Approvals tab (intended; UI changed)
+  - a second window of the same Director ... duplicate      passed on first run (existing behaviour)
+  - an earlier error message is cleared ...                  passed on first run (existing behaviour)
+
+Breaks (all killed):
+  1. Page stops showing the server's error text          4 failed: refusals "rejection without a reason",
+                                                         "over-limit ... page shows why", "second window ...
+                                                         duplicate", "earlier error message is cleared"
+  2. Page drops submitter and signer history             1 failed: "a reviewer sees who submitted ..."
+  3. Page keeps a stale error (no clear at next attempt) 1 failed: "an earlier error message is cleared ..."
+  4. Page offers controls to every role (Admin sees them) 1 failed: "an Admin is told their role cannot approve ..."
+  5. Server drops the duplicate-approver check           2 failed: "second window ... duplicate",
+                                                         "one Director cannot sign the same invoice twice ..."
+  6. Server drops the amount-above-limit refusal         2 failed: "over-limit approval the page wrongly offered ...",
+                                                         "a Manager is told the limit ..."

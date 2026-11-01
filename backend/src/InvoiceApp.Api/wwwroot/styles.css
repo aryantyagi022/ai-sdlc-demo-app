@@ -1,5 +1,7 @@
 :root { --ink:#16202a; --muted:#4f5b67; --line:#d5cfc2; --bg:#f4f1ea; --card:#fbfaf6; --accent:#0f766e; --warn:#b4452f; }
 * { box-sizing: border-box; }
+/* A display rule on an element the script hides would otherwise silently beat [hidden]. */
+[hidden] { display: none !important; }
 body { margin:0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color:var(--ink); background:var(--bg); }
 header { display:flex; justify-content:space-between; align-items:center; padding:16px 32px; background:var(--ink); color:#f4f1ea; }
 header h1 { margin:0; font-size:20px; }
@@ -28,3 +30,32 @@ th, td { text-align:left; padding:10px 8px; border-bottom:1px solid var(--line);
 .reject-row { grid-column:1 / -1; display:flex; gap:8px; }
 .reject-row input { flex:1; }
 [role="alert"] { color:var(--warn); margin:4px 0 0; }
+
+.badge {
+  display: inline-block;
+  margin-left: 0.5rem;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  background: #eef2ff;
+  color: #3730a3;
+  font-size: 0.85rem;
+}
+
+.refusal {
+  display: block;
+  color: #92400e;
+  font-size: 0.9rem;
+}
+
+.history {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 1rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+button[disabled] {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
