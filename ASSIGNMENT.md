@@ -2,8 +2,7 @@
 
 Markers used below: **[not in repo]** means the evidence exists only in chat or in `/tmp` (see the checklist in section 13); **[uncertain]** means the claim is not directly verified.
 
-Branch `feature/approval-limits-by-role`, 19 commits ahead of `main` (`66cb3f9`), HEAD `9169ff3`.
-Nothing is pushed and no PR exists yet.
+Branch `feature/approval-limits-by-role`, compared against `main` (`66cb3f9`).
 
 ## 1. What was built
 
