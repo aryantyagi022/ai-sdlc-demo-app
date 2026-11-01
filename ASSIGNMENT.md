@@ -258,7 +258,7 @@ Counts are hook records, not distinct runs. The seven custom agents in `.github/
 
 ## 12. Demo video
 
-> **Placeholder.** Required length: **8-10 minutes**. Link: `TODO`. Not recorded yet.
+> **Placeholder.** Required length: **8-10 minutes**. Link: 'https://nagarro-my.sharepoint.com/:v:/p/aryan_tyagi/IQB9Zpjhwbi9Q6n33UFB7_VTAUcvDQX9_mcviRr94rhD3Vo?nav=eyJyZWZlcnJhbEluZm8iOnsicmVmZXJyYWxBcHAiOiJPbmVEcml2ZUZvckJ1c2luZXNzIiwicmVmZXJyYWxBcHBQbGF0Zm9ybSI6IldlYiIsInJlZmVycmFsTW9kZSI6InZpZXciLCJyZWZlcnJhbFZpZXciOiJNeUZpbGVzTGlua0NvcHkifX0&e=iJNT2d'. Not recorded yet.
 
 ## 13. Evidence checklist
 
@@ -276,7 +276,7 @@ Counts are hook records, not distinct runs. The seven custom agents in `.github/
 | Review verdicts F1-F10 | `docs/reviews/review-findings.md` | committed with this write-up |
 | Reviewer evaluation | `docs/reviews/reviewer-evaluation/` | outputs, patches, key and summary in repo; score is chat-only |
 | Evaluation scoring | chat | **not in log** |
-| Demo video (8-10 minutes) | link | placeholder, not recorded |
+| Demo video (8-10 minutes) | 'https://nagarro-my.sharepoint.com/:v:/p/aryan_tyagi/IQB9Zpjhwbi9Q6n33UFB7_VTAUcvDQX9_mcviRr94rhD3Vo?nav=eyJyZWZlcnJhbEluZm8iOnsicmVmZXJyYWxBcHAiOiJPbmVEcml2ZUZvckJ1c2luZXNzIiwicmVmZXJyYWxBcHBQbGF0Zm9ybSI6IldlYiIsInJlZmVycmFsTW9kZSI6InZpZXciLCJyZWZlcnJhbFZpZXciOiJNeUZpbGVzTGlua0NvcHkifX0&e=iJNT2d' |
 
 ## 14. How to reproduce
 
