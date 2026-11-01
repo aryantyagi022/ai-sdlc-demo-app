@@ -39,13 +39,13 @@ public class ApprovalServiceTests
         new() { Id = id, CustomerName = "Test School", Amount = amount, Status = status, SubmittedBy = submittedBy };
 
     private static ApprovalService ServiceFor(params Invoice[] invoices) =>
-        new(new FakeInvoiceRepository(invoices), Policy());
+        new(new FakeInvoiceRepository(invoices), Policy(), new FakeRefusalLog());
 
     private static (ApprovalService Service, FakeInvoiceRepository Repository) ServiceAndRepositoryFor(
         params Invoice[] invoices)
     {
         var repository = new FakeInvoiceRepository(invoices);
-        return (new ApprovalService(repository, Policy()), repository);
+        return (new ApprovalService(repository, Policy(), new FakeRefusalLog()), repository);
     }
 
     [Fact]
@@ -317,7 +317,7 @@ public class ApprovalServiceTests
     {
         var repository = new FakeInvoiceRepository(
             InvoiceWith("INV-1", InvoiceStatus.PendingApproval, AboveDualThreshold));
-        var service = new ApprovalService(new StaleReadRepository(repository), Policy());
+        var service = new ApprovalService(new StaleReadRepository(repository), Policy(), new FakeRefusalLog());
 
         service.Approve("INV-1", AManager);
 
@@ -465,6 +465,245 @@ public class ApprovalServiceTests
         Assert.Equal("demo.director", result.Approvals[0].Username);
     }
 
+    // ---- Phase A: refusals leave no trace on the invoice, and are logged apart from it ----
+
+    private static (ApprovalService Service, FakeInvoiceRepository Repository, FakeRefusalLog Log) Harness(
+        params Invoice[] invoices)
+    {
+        var repository = new FakeInvoiceRepository(invoices);
+        var log = new FakeRefusalLog();
+        return (new ApprovalService(repository, Policy(), log), repository, log);
+    }
+
+    [Fact]
+    public void Approve_PlainSelfApprovalIsRefusedWithTheUserAndInvoiceAndChangesNothing()
+    {
+        var (service, repository, _) = Harness(
+            InvoiceWith("INV-1", InvoiceStatus.PendingApproval, 1_000m, submittedBy: "demo.manager"));
+        var before = InvoiceAssert.Capture(repository, "INV-1");
+
+        var refusal = Assert.Throws<ApprovalRefusedException>(() => service.Approve("INV-1", AManager));
+
+        Assert.Equal(ApprovalRefusalReason.SelfApprovalNotAllowed, refusal.Reason);
+        Assert.Contains("demo.manager", refusal.Message);
+        Assert.Contains("INV-1", refusal.Message);
+        InvoiceAssert.AssertUnchanged(repository, "INV-1", before);
+    }
+
+    [Fact]
+    public void Approve_ReportsSelfApprovalNotDuplicateWhenTheSubmitterAlreadySigned()
+    {
+        var invoice = InvoiceWith("INV-1", InvoiceStatus.PendingApproval, AboveDualThreshold, "demo.manager");
+        invoice.Approvals.Add(new ApprovalRecord("demo.manager", Manager, DateTime.UtcNow));
+        var (service, repository, _) = Harness(invoice);
+        var before = InvoiceAssert.Capture(repository, "INV-1");
+
+        var refusal = Assert.Throws<ApprovalRefusedException>(() => service.Approve("INV-1", AManager));
+
+        Assert.Equal(ApprovalRefusalReason.SelfApprovalNotAllowed, refusal.Reason);
+        InvoiceAssert.AssertUnchanged(repository, "INV-1", before);
+    }
+
+    [Fact]
+    public void Approve_DuplicateApproverIsRefusedWithTheUserAndInvoiceAndChangesNothing()
+    {
+        var (service, repository, _) = Harness(
+            InvoiceWith("INV-1", InvoiceStatus.PendingApproval, AboveDualThreshold));
+        service.Approve("INV-1", AManager);
+        var before = InvoiceAssert.Capture(repository, "INV-1");
+
+        var refusal = Assert.Throws<ApprovalRefusedException>(() => service.Approve("INV-1", AManager));
+
+        Assert.Equal(ApprovalRefusalReason.DuplicateApprover, refusal.Reason);
+        Assert.Contains("demo.manager", refusal.Message);
+        Assert.Contains("INV-1", refusal.Message);
+        InvoiceAssert.AssertUnchanged(repository, "INV-1", before);
+    }
+
+    [Fact]
+    public void Approve_ASignatureOnOneInvoicePlacesNoRestrictionOnAnother()
+    {
+        var (service, _, _) = Harness(
+            InvoiceWith("INV-1", InvoiceStatus.PendingApproval, AboveDualThreshold),
+            InvoiceWith("INV-2", InvoiceStatus.PendingApproval, 1_000m));
+        service.Approve("INV-1", ADirector);
+
+        var result = service.Approve("INV-2", ADirector);
+
+        Assert.Equal(InvoiceStatus.Approved, result.Status);
+    }
+
+    public static TheoryData<decimal, string, Approver, ApprovalRefusalReason> RefusedAttempts() => new()
+    {
+        { 50_000.01m, "demo.clerk", AManager, ApprovalRefusalReason.AboveApprovalLimit },
+        { 1_000m, "demo.clerk", AnAdmin, ApprovalRefusalReason.RoleCannotApprove },
+        { 1_000m, "demo.clerk", new Approver("demo.intern", "Intern"), ApprovalRefusalReason.RoleCannotApprove },
+        { 1_000m, "demo.manager", AManager, ApprovalRefusalReason.SelfApprovalNotAllowed },
+    };
+
+    [Theory]
+    [MemberData(nameof(RefusedAttempts))]
+    public void Approve_EveryRefusalLeavesStateVersionAndUpdateCountUnchanged(
+        decimal amount, string submittedBy, Approver approver, ApprovalRefusalReason expected)
+    {
+        var (service, repository, _) = Harness(
+            InvoiceWith("INV-1", InvoiceStatus.PendingApproval, amount, submittedBy));
+        var before = InvoiceAssert.Capture(repository, "INV-1");
+
+        var refusal = Assert.Throws<ApprovalRefusedException>(() => service.Approve("INV-1", approver));
+
+        Assert.Equal(expected, refusal.Reason);
+        InvoiceAssert.AssertUnchanged(repository, "INV-1", before);
+    }
+
+    [Fact]
+    public void Reject_RefusedByAdminLeavesStateVersionAndUpdateCountUnchanged()
+    {
+        var (service, repository, _) = Harness(InvoiceWith("INV-1", InvoiceStatus.PendingApproval));
+        var before = InvoiceAssert.Capture(repository, "INV-1");
+
+        Assert.Throws<ApprovalRefusedException>(() => service.Reject("INV-1", AnAdmin, "No"));
+
+        InvoiceAssert.AssertUnchanged(repository, "INV-1", before);
+    }
+
+    [Fact]
+    public void Reject_ReportsAMissingInvoiceBeforeAMissingReason()
+    {
+        var service = ServiceFor();
+
+        Assert.Throws<KeyNotFoundException>(() => service.Reject("INV-404", ADirector, "  "));
+    }
+
+    [Fact]
+    public void Reject_ReportsALifecycleConflictBeforeAMissingReason()
+    {
+        var service = ServiceFor(InvoiceWith("INV-1", InvoiceStatus.Approved));
+
+        Assert.Throws<InvalidOperationException>(() => service.Reject("INV-1", ADirector, "  "));
+    }
+
+    [Fact]
+    public void Reject_ReportsAMissingReasonOnlyOnAPendingInvoice()
+    {
+        var service = ServiceFor(InvoiceWith("INV-1", InvoiceStatus.PendingApproval));
+
+        Assert.Throws<ArgumentException>(() => service.Reject("INV-1", ADirector, "  "));
+    }
+
+    [Theory]
+    [InlineData("demo.manager", Manager, 1_000)]
+    [InlineData("demo.director", Director, 750_000)]
+    public void Reject_AnyApprovingRoleMayRejectAnyAmountAndKeepsEarlierApprovals(
+        string username, string role, int amount)
+    {
+        var invoice = InvoiceWith("INV-1", InvoiceStatus.PendingApproval, amount);
+        invoice.Approvals.Add(new ApprovalRecord("demo.earlier", Manager, DateTime.UtcNow));
+        var (service, repository, _) = Harness(invoice);
+
+        service.Reject("INV-1", new Approver(username, role), "Wrong customer");
+
+        var stored = repository.GetById("INV-1")!;
+        Assert.Equal(InvoiceStatus.Rejected, stored.Status);
+        Assert.Equal("Wrong customer", stored.DecisionNote);
+        Assert.Equal(username, stored.DecidedBy);
+        Assert.NotNull(stored.DecidedAt);
+        Assert.Equal("demo.earlier", Assert.Single(stored.Approvals).Username);
+    }
+
+    [Fact]
+    public void Reject_TheSubmitterMayRejectTheirOwnInvoice()
+    {
+        var (service, repository, log) = Harness(
+            InvoiceWith("INV-1", InvoiceStatus.PendingApproval, 1_000m, submittedBy: "demo.manager"));
+
+        service.Reject("INV-1", AManager, "Raised in error");
+
+        Assert.Equal(InvoiceStatus.Rejected, repository.GetById("INV-1")!.Status);
+        Assert.Empty(log.Entries);
+    }
+
+    [Fact]
+    public void Reject_AnApproverWhoAlreadySignedMayStillReject()
+    {
+        var invoice = InvoiceWith("INV-1", InvoiceStatus.PendingApproval, AboveDualThreshold);
+        invoice.Approvals.Add(new ApprovalRecord("demo.director", Director, DateTime.UtcNow));
+        var (service, repository, _) = Harness(invoice);
+
+        service.Reject("INV-1", ADirector, "Second thoughts");
+
+        Assert.Equal(InvoiceStatus.Rejected, repository.GetById("INV-1")!.Status);
+    }
+
+    public static TheoryData<string, decimal, string, Approver, ApprovalRefusalReason> LoggedRefusals() => new()
+    {
+        { "AboveApprovalLimit", 50_000.01m, "demo.clerk", AManager, ApprovalRefusalReason.AboveApprovalLimit },
+        { "SelfApprovalNotAllowed", 1_000m, "demo.manager", AManager, ApprovalRefusalReason.SelfApprovalNotAllowed },
+        { "RoleCannotApprove", 1_000m, "demo.clerk", AnAdmin, ApprovalRefusalReason.RoleCannotApprove },
+    };
+
+    [Theory]
+    [MemberData(nameof(LoggedRefusals))]
+    public void Approve_ARefusalWritesExactlyOneLogEntryWithTheSameMessage(
+        string scenario, decimal amount, string submittedBy, Approver approver, ApprovalRefusalReason expected)
+    {
+        var (service, repository, log) = Harness(
+            InvoiceWith("INV-1", InvoiceStatus.PendingApproval, amount, submittedBy));
+        var before = InvoiceAssert.Capture(repository, "INV-1");
+        var started = DateTime.UtcNow;
+
+        var refusal = Assert.Throws<ApprovalRefusedException>(() => service.Approve("INV-1", approver));
+
+        var entry = Assert.Single(log.Entries);
+        Assert.Equal("INV-1", entry.InvoiceId);
+        Assert.Equal(approver.Username, entry.Username);
+        Assert.Equal(approver.Role, entry.Role);
+        Assert.Equal(DecisionAction.Approve, entry.Action);
+        Assert.Equal(expected, entry.Reason);
+        Assert.Equal(refusal.Message, entry.Message);
+        Assert.InRange(entry.OccurredAt, started, DateTime.UtcNow);
+        Assert.Equal(DateTimeKind.Utc, entry.OccurredAt.Kind);
+        InvoiceAssert.AssertUnchanged(repository, "INV-1", before);
+    }
+
+    [Fact]
+    public void Approve_ADuplicateApproverRefusalIsLogged()
+    {
+        var (service, _, log) = Harness(InvoiceWith("INV-1", InvoiceStatus.PendingApproval, AboveDualThreshold));
+        service.Approve("INV-1", AManager);
+
+        Assert.Throws<ApprovalRefusedException>(() => service.Approve("INV-1", AManager));
+
+        Assert.Equal(ApprovalRefusalReason.DuplicateApprover, Assert.Single(log.Entries).Reason);
+    }
+
+    [Fact]
+    public void Reject_ARefusedRoleIsLoggedWithTheRejectAction()
+    {
+        var (service, _, log) = Harness();
+
+        Assert.Throws<ApprovalRefusedException>(() => service.Reject("INV-404", AnAdmin, "  "));
+
+        var entry = Assert.Single(log.Entries);
+        Assert.Equal("INV-404", entry.InvoiceId);
+        Assert.Equal(DecisionAction.Reject, entry.Action);
+        Assert.Equal(ApprovalRefusalReason.RoleCannotApprove, entry.Reason);
+    }
+
+    [Fact]
+    public void NotFoundConflictAndBadReasonAreNotWrittenToTheCodedRefusalLog()
+    {
+        var (service, _, log) = Harness(
+            InvoiceWith("INV-1", InvoiceStatus.PendingApproval),
+            InvoiceWith("INV-2", InvoiceStatus.Approved));
+
+        Assert.Throws<KeyNotFoundException>(() => service.Approve("INV-404", ADirector));
+        Assert.Throws<InvalidOperationException>(() => service.Approve("INV-2", ADirector));
+        Assert.Throws<ArgumentException>(() => service.Reject("INV-1", ADirector, " "));
+
+        Assert.Empty(log.Entries);
+    }
+
     // ---- Authority is checked before anything else, and comes only from configuration ----
 
     [Fact]
@@ -517,7 +756,8 @@ public class ApprovalServiceTests
         };
         var service = new ApprovalService(
             new FakeInvoiceRepository(InvoiceWith("INV-1", InvoiceStatus.PendingApproval, 200_000m)),
-            new ApprovalPolicy(ladder, Director));
+            new ApprovalPolicy(ladder, Director),
+            new FakeRefusalLog());
 
         var result = service.Approve("INV-1", new Approver("demo.vp", "VicePresident"));
 

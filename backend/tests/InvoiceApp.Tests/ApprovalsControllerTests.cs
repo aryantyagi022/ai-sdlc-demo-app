@@ -36,13 +36,15 @@ public class ApprovalsControllerTests : IDisposable
 
     private record ApprovalState(string Status, string[] Approvals, bool AwaitingSecondApproval);
 
-    private async Task<HttpClient> SignedInAs(string username)
+    private async Task<HttpClient> SignedInAs(string username) => await SignedInAs(_application, username);
+
+    private static async Task<HttpClient> SignedInAs(WebApplicationFactory<Program> application, string username)
     {
-        var demoUser = _application.Services
+        var demoUser = application.Services
             .GetRequiredService<IOptions<DemoUsersOptions>>().Value.Users
             .Single(user => user.Username == username);
 
-        var client = _application.CreateClient();
+        var client = application.CreateClient();
         var signIn = await client.PostAsJsonAsync("/api/auth/login", new Dictionary<string, string>
         {
             ["username"] = demoUser.Username,
@@ -164,6 +166,156 @@ public class ApprovalsControllerTests : IDisposable
             $"/api/approvals/{SmallPendingInvoice}/reject", new { Reason = "   " });
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    private sealed record StoredInvoice(
+        string Status, string[] Approvals, string? FirstApprovedBy, string? DecidedBy,
+        DateTime? DecidedAt, string? DecisionNote, int Version);
+
+    private static StoredInvoice Stored(WebApplicationFactory<Program> application, string invoiceId)
+    {
+        var invoice = application.Services.GetRequiredService<InvoiceApp.Domain.IInvoiceRepository>()
+            .GetById(invoiceId)!;
+        return new StoredInvoice(
+            invoice.Status.ToString(),
+            invoice.Approvals.Select(approval => approval.Username).ToArray(),
+            invoice.FirstApprovedBy, invoice.DecidedBy, invoice.DecidedAt, invoice.DecisionNote, invoice.Version);
+    }
+
+    private static void AssertSame(StoredInvoice before, StoredInvoice after)
+    {
+        Assert.Equal(before.Status, after.Status);
+        Assert.Equal(before.Approvals, after.Approvals);
+        Assert.Equal(before.FirstApprovedBy, after.FirstApprovedBy);
+        Assert.Equal(before.DecidedBy, after.DecidedBy);
+        Assert.Equal(before.DecidedAt, after.DecidedAt);
+        Assert.Equal(before.DecisionNote, after.DecisionNote);
+        Assert.Equal(before.Version, after.Version);
+    }
+
+    private static StringContent JsonBody(string json) => new(json, System.Text.Encoding.UTF8, "application/json");
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("{}")]
+    public async Task Reject_AnAdminWithNoBodyOrNoReasonIsRefusedForRole(string? body)
+    {
+        var admin = await SignedInAs("demo.admin");
+        var before = Stored(_application, SmallPendingInvoice);
+
+        var response = await admin.PostAsync(
+            $"/api/approvals/{SmallPendingInvoice}/reject", body is null ? null : JsonBody(body));
+        var refusal = await response.Content.ReadFromJsonAsync<Refusal>(Json);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal("RoleCannotApprove", refusal!.Reason);
+        AssertSame(before, Stored(_application, SmallPendingInvoice));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("{}")]
+    public async Task Reject_AManagerWithNoBodyOrNoReasonOnAPendingInvoiceGets400AndNothingChanges(string? body)
+    {
+        var manager = await SignedInAs("demo.manager");
+        var before = Stored(_application, SmallPendingInvoice);
+
+        var response = await manager.PostAsync(
+            $"/api/approvals/{SmallPendingInvoice}/reject", body is null ? null : JsonBody(body));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        AssertSame(before, Stored(_application, SmallPendingInvoice));
+    }
+
+    [Fact]
+    public async Task Approve_RefusalForAManagerOverTheirLimitNamesTheAmountAndTheLimit()
+    {
+        var manager = await SignedInAs("demo.manager");
+        var before = Stored(_application, MidRangeInvoice);
+
+        var response = await manager.PostAsync($"/api/approvals/{MidRangeInvoice}/approve", null);
+        var refusal = await response.Content.ReadFromJsonAsync<Refusal>(Json);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Contains("200,000.00", refusal!.Error);
+        Assert.Contains("50,000.00", refusal.Error);
+        AssertSame(before, Stored(_application, MidRangeInvoice));
+    }
+
+    [Theory]
+    [InlineData("approve", "INV-does-not-exist", HttpStatusCode.NotFound)]
+    [InlineData("reject", "INV-does-not-exist", HttpStatusCode.NotFound)]
+    [InlineData("approve", AlreadyApprovedInvoice, HttpStatusCode.Conflict)]
+    [InlineData("reject", AlreadyApprovedInvoice, HttpStatusCode.Conflict)]
+    public async Task Decide_ByAnAuthorisedDirectorOnAnUnknownOrDecidedInvoiceGets404Or409(
+        string action, string invoiceId, HttpStatusCode expected)
+    {
+        var director = await SignedInAs("demo.director");
+        var known = new[] { SmallPendingInvoice, MidRangeInvoice, LargeInvoice, AlreadyApprovedInvoice };
+        var before = known.ToDictionary(id => id, id => Stored(_application, id));
+
+        var response = await director.PostAsync(
+            $"/api/approvals/{invoiceId}/{action}",
+            action == "reject" ? JsonBody("""{"reason":"Not payable"}""") : null);
+
+        Assert.Equal(expected, response.StatusCode);
+        foreach (var id in known)
+        {
+            AssertSame(before[id], Stored(_application, id));
+        }
+    }
+
+    private WebApplicationFactory<Program> ApplicationWithClerk(bool grantClerkAnApprovalLimit)
+    {
+        var settings = new Dictionary<string, string?>
+        {
+            ["Users:4:Username"] = "demo.clerk",
+            ["Users:4:Password"] = "ChangeMe123!",
+            ["Users:4:Role"] = "Clerk"
+        };
+
+        if (grantClerkAnApprovalLimit)
+        {
+            settings["Approval:RoleLimits:Clerk"] = "1000";
+        }
+
+        // UseSetting rather than ConfigureAppConfiguration: Program.cs reads Approval:* while the
+        // builder is created, before ConfigureAppConfiguration callbacks have been applied.
+        return _application.WithWebHostBuilder(host =>
+        {
+            foreach (var (key, value) in settings)
+            {
+                host.UseSetting(key, value);
+            }
+        });
+    }
+
+    [Fact]
+    public async Task Approve_ARoleAddedOnlyToConfigurationGainsItsConfiguredLimit()
+    {
+        using var application = ApplicationWithClerk(grantClerkAnApprovalLimit: true);
+        var clerk = await SignedInAs(application, "demo.clerk");
+
+        var within = await clerk.PostAsync($"/api/approvals/{SmallPendingInvoice}/approve", null);
+        var above = await clerk.PostAsync("/api/approvals/INV-1001/approve", null);
+        var refusal = await above.Content.ReadFromJsonAsync<Refusal>(Json);
+
+        Assert.Equal(HttpStatusCode.OK, within.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, above.StatusCode);
+        Assert.Equal("AboveApprovalLimit", refusal!.Reason);
+    }
+
+    [Fact]
+    public async Task Approve_TheSameRoleWithoutConfigurationIsRefusedAsRoleCannotApprove()
+    {
+        using var application = ApplicationWithClerk(grantClerkAnApprovalLimit: false);
+        var clerk = await SignedInAs(application, "demo.clerk");
+
+        var response = await clerk.PostAsync($"/api/approvals/{SmallPendingInvoice}/approve", null);
+        var refusal = await response.Content.ReadFromJsonAsync<Refusal>(Json);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal("RoleCannotApprove", refusal!.Reason);
     }
 
     [Fact]

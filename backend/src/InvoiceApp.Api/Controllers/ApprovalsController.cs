@@ -21,15 +21,17 @@ public class ApprovalsController : ApiControllerBase
         _policy = policy;
     }
 
-    public record RejectRequest(string Reason);
+    public record RejectRequest(string? Reason);
 
     [HttpPost("{invoiceId}/approve")]
     public ActionResult<InvoiceView> Approve(string invoiceId) =>
         Handle(() => View(_approvals.Approve(invoiceId, CurrentApprover())));
 
+    // The body is optional and the reason nullable so a missing reason reaches the service, where
+    // the role check runs first (403) and only then the reason check (400).
     [HttpPost("{invoiceId}/reject")]
-    public ActionResult<InvoiceView> Reject(string invoiceId, [FromBody] RejectRequest request) =>
-        Handle(() => View(_approvals.Reject(invoiceId, CurrentApprover(), request.Reason)));
+    public ActionResult<InvoiceView> Reject(string invoiceId, [FromBody] RejectRequest? request = null) =>
+        Handle(() => View(_approvals.Reject(invoiceId, CurrentApprover(), request?.Reason ?? string.Empty)));
 
     private InvoiceView View(Invoice invoice) =>
         InvoiceView.From(invoice, _policy, _approvals.EligibilityFor(invoice, CurrentApprover()));

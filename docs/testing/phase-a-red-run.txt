@@ -1,0 +1,54 @@
+PHASE A RED RUN (task T022)
+===========================
+
+PROVENANCE
+  Captured original evidence: the counts and failure messages below were reported in the
+  session when the run happened (before T023-T027, against null-returning stubs
+  ApprovalPolicy.RefuseRole / RefuseApproval and the pre-change service and controller).
+  The full raw dotnet test output was NOT saved to a file at the time, so it cannot be
+  reproduced verbatim here. Individual test names are listed only where they were recorded;
+  they are NOT reconstructed for the rest.
+  Rerun: none. Going back to the pre-implementation code would mean discarding the
+  implementation, so no rerun is included in this file.
+
+TOTALS (captured)
+  118 tests, 18 failed, 100 passed.
+  Every failure was an assertion failure.
+  No compile errors. No NotImplementedException.
+
+FAILURES BY CATEGORY (captured): 18 = 8 + 5 + 2 + 3
+
+1. Policy tests against the stubs - 8 failures
+   Message shapes: "Assert.NotNull() Failure: Value is null" and
+   "Expected: DuplicateApprover / Actual: null".
+   Meaning: only proves the stub refuses nothing. This is weak red evidence; the
+   break-the-rule step (T029) is what proves these tests load-bearing.
+   Test names: not recorded.
+
+2. [NEW] Refusal log - 5 failures
+   Message: "Assert.Single() Failure: The collection was empty".
+   Test names: not recorded.
+
+3. [NEW] Reject validation order - 2 failures
+   Expected KeyNotFoundException (unknown invoice) or InvalidOperationException
+   (not pending); got ArgumentException (blank reason was checked first).
+   Tests (names recorded in the T029 run that later caught the reason-above-Find break):
+     Reject_ReportsAMissingInvoiceBeforeAMissingReason
+     Reject_ReportsALifecycleConflictBeforeAMissingReason
+
+4. [NEW] Controller reject body - 3 failures
+   Admin reject, no body: expected 403, got 415.
+   Admin reject, body {}: expected 403, got 400.
+   Manager reject, no body: expected 400, got 415.
+   Test names: not recorded.
+
+PASSED ON FIRST RUN (captured)
+  The 100 passing tests included the [EXISTING]-kind tests (self-approval, duplicate
+  approver, 404/409 and configuration-binding) that exercise behaviour the code already
+  had. They are not red evidence; they were proven by break-the-rule (T029, nine breaks,
+  all caught).
+
+SETUP NOTE (captured)
+  The first configuration-binding test attempt used ConfigureAppConfiguration and failed
+  with 403 instead of 200 because Program.cs reads Approval:* before those callbacks apply.
+  That was a test-setup problem, fixed with UseSetting (see T020), not a business failure.

@@ -12,6 +12,7 @@ builder.Services
 builder.Services.Configure<DemoUsersOptions>(builder.Configuration);
 builder.Services.AddSingleton<SessionStore>();
 builder.Services.AddSingleton<IInvoiceRepository, InMemoryInvoiceRepository>();
+builder.Services.AddSingleton<IRefusalLog, InMemoryRefusalLog>();
 
 var roleLimits = builder.Configuration
     .GetSection("Approval:RoleLimits")

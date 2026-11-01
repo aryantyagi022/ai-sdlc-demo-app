@@ -74,4 +74,150 @@ public class ApprovalPolicyTests
         Assert.True(policy.CanApprove("VicePresident"));
         Assert.Equal(250_000m, policy.LimitFor("VicePresident"));
     }
+
+    // ---- RefuseApproval / RefuseRole (spec FR-001..FR-005, FR-009) ----
+
+    private static Invoice Pending(decimal amount, string submittedBy = "demo.clerk", params ApprovalRecord[] approvals)
+    {
+        var invoice = new Invoice
+        {
+            Id = "INV-1",
+            Amount = amount,
+            Status = InvoiceStatus.PendingApproval,
+            SubmittedBy = submittedBy
+        };
+        invoice.Approvals.AddRange(approvals);
+        return invoice;
+    }
+
+    private static ApprovalRecord Signed(string username, string role) => new(username, role, DateTime.UtcNow);
+
+    private static readonly Approver AManager = new("demo.manager", "Manager");
+    private static readonly Approver ADirector = new("demo.director", "Director");
+
+    [Theory]
+    [InlineData("Manager", 50_000.00)]
+    [InlineData("manager", 50_000.00)]
+    [InlineData("MANAGER", 50_000.00)]
+    [InlineData("Director", 50_000.01)]
+    [InlineData("DIRECTOR", 500_000.00)]
+    public void RefuseApproval_AllowsAmountsUpToAndIncludingTheRoleLimit(string role, double amount)
+    {
+        var policy = new ApprovalPolicy(Ladder(), "Director");
+
+        var refusal = policy.RefuseApproval(Pending((decimal)amount), new Approver("demo.user", role));
+
+        Assert.Null(refusal);
+    }
+
+    [Fact]
+    public void RefuseApproval_RefusesAManagerOneCentAboveTheLimitAndNamesAmountAndLimit()
+    {
+        var policy = new ApprovalPolicy(Ladder(), "Director");
+
+        var refusal = policy.RefuseApproval(Pending(50_000.01m), AManager);
+
+        Assert.NotNull(refusal);
+        Assert.Equal(ApprovalRefusalReason.AboveApprovalLimit, refusal.Reason);
+        Assert.Contains("50,000.01", refusal.Message);
+        Assert.Contains("50,000.00", refusal.Message);
+    }
+
+    [Theory]
+    [InlineData("Admin")]
+    [InlineData("Intern")]
+    public void RefuseRole_RefusesAdminAndUnknownRolesAndNamesTheRole(string role)
+    {
+        var policy = new ApprovalPolicy(Ladder(), "Director");
+
+        var refusal = policy.RefuseRole(new Approver("demo.user", role));
+
+        Assert.NotNull(refusal);
+        Assert.Equal(ApprovalRefusalReason.RoleCannotApprove, refusal.Reason);
+        Assert.Contains(role, refusal.Message);
+    }
+
+    [Theory]
+    [InlineData("Manager")]
+    [InlineData("director")]
+    public void RefuseRole_AllowsConfiguredRolesWhateverTheirCase(string role)
+    {
+        var policy = new ApprovalPolicy(Ladder(), "Director");
+
+        Assert.Null(policy.RefuseRole(new Approver("demo.user", role)));
+    }
+
+    [Fact]
+    public void RefuseApproval_HasNoTwoManagerPathBetweenTheManagerLimitAndTheDirectorLimit()
+    {
+        var policy = new ApprovalPolicy(Ladder(), "Director");
+        var alreadySignedByAnotherManager = Pending(
+            200_000m, "demo.clerk", Signed("demo.manager2", "Manager"));
+
+        var refusal = policy.RefuseApproval(alreadySignedByAnotherManager, AManager);
+
+        Assert.NotNull(refusal);
+        Assert.Equal(ApprovalRefusalReason.AboveApprovalLimit, refusal.Reason);
+    }
+
+    [Fact]
+    public void RefuseApproval_RefusesTheSubmitterAndNamesTheUserAndInvoice()
+    {
+        var policy = new ApprovalPolicy(Ladder(), "Director");
+
+        var refusal = policy.RefuseApproval(Pending(1_000m, submittedBy: "demo.manager"), AManager);
+
+        Assert.NotNull(refusal);
+        Assert.Equal(ApprovalRefusalReason.SelfApprovalNotAllowed, refusal.Reason);
+        Assert.Contains("demo.manager", refusal.Message);
+        Assert.Contains("INV-1", refusal.Message);
+    }
+
+    [Fact]
+    public void RefuseApproval_ReportsSelfApprovalNotDuplicateWhenTheSubmitterAlsoAlreadySigned()
+    {
+        var policy = new ApprovalPolicy(Ladder(), "Director");
+        var invoice = Pending(1_000m, "demo.manager", Signed("demo.manager", "Manager"));
+
+        var refusal = policy.RefuseApproval(invoice, AManager);
+
+        Assert.Equal(ApprovalRefusalReason.SelfApprovalNotAllowed, refusal?.Reason);
+    }
+
+    [Fact]
+    public void RefuseApproval_RefusesTheSameUserTwiceEvenWhenTheAmountIsAlsoAboveTheirLimit()
+    {
+        var policy = new ApprovalPolicy(Ladder(), "Director");
+        var invoice = Pending(200_000m, "demo.clerk", Signed("demo.manager", "Manager"));
+
+        var refusal = policy.RefuseApproval(invoice, AManager);
+
+        Assert.NotNull(refusal);
+        Assert.Equal(ApprovalRefusalReason.DuplicateApprover, refusal.Reason);
+        Assert.Contains("demo.manager", refusal.Message);
+        Assert.Contains("INV-1", refusal.Message);
+    }
+
+    [Theory]
+    [InlineData("Alice", "alice")]
+    [InlineData("alice", "alice ")]
+    [InlineData("Alice", "alice ")]
+    public void RefuseApproval_ComparesUsernamesOrdinallyWithoutTrimming(string signed, string approving)
+    {
+        var policy = new ApprovalPolicy(Ladder(), "Director");
+        var invoice = Pending(1_000m, "demo.clerk", Signed(signed, "Manager"));
+
+        Assert.Null(policy.RefuseApproval(invoice, new Approver(approving, "Manager")));
+    }
+
+    [Fact]
+    public void RefuseApproval_TreatsTheIdenticalUsernameAsTheSamePerson()
+    {
+        var policy = new ApprovalPolicy(Ladder(), "Director");
+        var invoice = Pending(1_000m, "demo.clerk", Signed("alice", "Manager"));
+
+        var refusal = policy.RefuseApproval(invoice, new Approver("alice", "Manager"));
+
+        Assert.Equal(ApprovalRefusalReason.DuplicateApprover, refusal?.Reason);
+    }
 }

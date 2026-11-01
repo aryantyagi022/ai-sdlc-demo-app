@@ -15,6 +15,9 @@ public class FakeInvoiceRepository : IInvoiceRepository
         _invoices.AddRange(invoices.Select(invoice => invoice.Clone()));
     }
 
+    /// <summary>How many saves succeeded, so a test can prove a refused attempt saved nothing.</summary>
+    public int UpdateCount { get; private set; }
+
     public IReadOnlyList<Invoice> GetAll() =>
         _invoices.Select(invoice => invoice.Clone()).ToList();
 
@@ -44,6 +47,7 @@ public class FakeInvoiceRepository : IInvoiceRepository
 
         invoice.Version++;
         _invoices[index] = invoice.Clone();
+        UpdateCount++;
         return true;
     }
 

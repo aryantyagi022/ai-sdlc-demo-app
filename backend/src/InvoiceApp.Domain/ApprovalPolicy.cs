@@ -67,4 +67,72 @@ public class ApprovalPolicy
         string.Equals(role, SecondApproverRole, StringComparison.OrdinalIgnoreCase);
 
     public bool RequiresTwoApprovers(decimal amount) => amount > DualApprovalThreshold;
+
+    /// <summary>Step 1 of the order of evaluation: does this role carry approval authority at all?</summary>
+    public ApprovalRefusal? RefuseRole(Approver approver) =>
+        CanApprove(approver.Role)
+            ? null
+            : new ApprovalRefusal(
+                ApprovalRefusalReason.RoleCannotApprove,
+                $"Role {approver.Role} has no approval authority.");
+
+    /// <summary>
+    /// The checks that can refuse an approval of a pending invoice, in the order their reasons are
+    /// reported: self-approval, duplicate approver, then the amount against the role's authority.
+    /// Pure: reads only this invoice and this approver.
+    /// </summary>
+    public ApprovalRefusal? RefuseApproval(Invoice invoice, Approver approver)
+    {
+        var roleRefusal = RefuseRole(approver);
+
+        if (roleRefusal is not null)
+        {
+            return roleRefusal;
+        }
+
+        if (IsSameUser(invoice.SubmittedBy, approver.Username))
+        {
+            return new ApprovalRefusal(
+                ApprovalRefusalReason.SelfApprovalNotAllowed,
+                $"{approver.Username} submitted invoice {invoice.Id} and cannot approve it.");
+        }
+
+        if (invoice.Approvals.Any(approval => IsSameUser(approval.Username, approver.Username)))
+        {
+            return new ApprovalRefusal(
+                ApprovalRefusalReason.DuplicateApprover,
+                $"{approver.Username} has already approved invoice {invoice.Id}; " +
+                "a second approver is required.");
+        }
+
+        if (RequiresTwoApprovers(invoice.Amount))
+        {
+            return RefuseSignatureOnLargeInvoice(invoice, approver);
+        }
+
+        var limit = LimitFor(approver.Role)!.Value;
+
+        return invoice.Amount > limit
+            ? new ApprovalRefusal(
+                ApprovalRefusalReason.AboveApprovalLimit,
+                $"{approver.Role} may approve up to {limit:N2}; invoice {invoice.Id} is " +
+                $"{invoice.Amount:N2} and needs a higher approval level.")
+            : null;
+    }
+
+    /// <summary>
+    /// Above the threshold the first signature may come from any approving role - a role limit
+    /// governs solo authority, not participation - but the second must hold the second-approver role.
+    /// </summary>
+    private ApprovalRefusal? RefuseSignatureOnLargeInvoice(Invoice invoice, Approver approver) =>
+        invoice.Approvals.Count == 0 || IsSecondApproverRole(approver.Role)
+            ? null
+            : new ApprovalRefusal(
+                ApprovalRefusalReason.SecondApproverMustBeDirector,
+                $"Invoice {invoice.Id} is {invoice.Amount:N2}, above {DualApprovalThreshold:N2}, " +
+                $"so the second approval must come from a {SecondApproverRole}.");
+
+    /// <summary>Usernames compare exactly: ordinal, case-sensitive, no trimming.</summary>
+    private static bool IsSameUser(string? left, string? right) =>
+        left is not null && right is not null && string.Equals(left, right, StringComparison.Ordinal);
 }

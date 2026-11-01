@@ -19,6 +19,9 @@ public enum ApprovalRefusalReason
     RoleCannotApprove
 }
 
+/// <summary>A refusal decided by the policy: a stable code and a message naming the concrete fact.</summary>
+public record ApprovalRefusal(ApprovalRefusalReason Reason, string Message);
+
 /// <summary>
 /// An approval attempt that was refused on authority grounds. Carries a stable reason code
 /// alongside a message naming the concrete fact behind the refusal.

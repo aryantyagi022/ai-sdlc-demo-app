@@ -9,11 +9,13 @@ public class ApprovalService
 {
     private readonly IInvoiceRepository _repository;
     private readonly ApprovalPolicy _policy;
+    private readonly IRefusalLog _refusalLog;
 
-    public ApprovalService(IInvoiceRepository repository, ApprovalPolicy policy)
+    public ApprovalService(IInvoiceRepository repository, ApprovalPolicy policy, IRefusalLog refusalLog)
     {
         _repository = repository;
         _policy = policy;
+        _refusalLog = refusalLog;
     }
 
     public Invoice Submit(string invoiceId, string submittedBy)
@@ -37,11 +39,11 @@ public class ApprovalService
     /// </summary>
     public Invoice Approve(string invoiceId, Approver approver)
     {
-        EnsureRoleMayDecide(approver);
+        RefuseIfNotAuthorised(invoiceId, approver, DecisionAction.Approve);
 
         var invoice = Find(invoiceId);
         EnsurePending(invoice);
-        EnsureMayApprove(invoice, approver);
+        RefuseIfNotPermitted(invoice, approver);
 
         invoice.Approvals.Add(new ApprovalRecord(approver.Username, approver.Role, DateTime.UtcNow));
 
@@ -61,15 +63,15 @@ public class ApprovalService
     /// </summary>
     public Invoice Reject(string invoiceId, Approver approver, string reason)
     {
-        EnsureRoleMayDecide(approver);
+        RefuseIfNotAuthorised(invoiceId, approver, DecisionAction.Reject);
+
+        var invoice = Find(invoiceId);
+        EnsurePending(invoice);
 
         if (string.IsNullOrWhiteSpace(reason))
         {
             throw new ArgumentException("A reason is required to reject an invoice.", nameof(reason));
         }
-
-        var invoice = Find(invoiceId);
-        EnsurePending(invoice);
 
         invoice.Status = InvoiceStatus.Rejected;
         invoice.DecidedBy = approver.Username;
@@ -84,99 +86,60 @@ public class ApprovalService
     /// </summary>
     public ApprovalEligibility EligibilityFor(Invoice invoice, Approver approver)
     {
-        try
-        {
-            EnsureRoleMayDecide(approver);
-            EnsurePending(invoice);
-            EnsureMayApprove(invoice, approver);
-            return ApprovalEligibility.Allowed;
-        }
-        catch (ApprovalRefusedException refusal)
-        {
-            return ApprovalEligibility.Refused(refusal.Reason, refusal.Message);
-        }
-        catch (InvalidOperationException notPending)
-        {
-            return ApprovalEligibility.NotOpenForDecision(notPending.Message);
-        }
-    }
+        var roleRefusal = _policy.RefuseRole(approver);
 
-    /// <summary>All the checks that can refuse an approval, in the order their reasons are reported.</summary>
-    private void EnsureMayApprove(Invoice invoice, Approver approver)
-    {
-        if (IsSameUser(invoice.SubmittedBy, approver.Username))
+        if (roleRefusal is not null)
         {
-            throw new ApprovalRefusedException(
-                ApprovalRefusalReason.SelfApprovalNotAllowed,
-                $"{approver.Username} submitted invoice {invoice.Id} and cannot approve it.");
+            return ApprovalEligibility.Refused(roleRefusal.Reason, roleRefusal.Message);
         }
 
-        if (HasAlreadyApproved(invoice, approver))
+        if (invoice.Status != InvoiceStatus.PendingApproval)
         {
-            throw new ApprovalRefusedException(
-                ApprovalRefusalReason.DuplicateApprover,
-                $"{approver.Username} has already approved invoice {invoice.Id}; " +
-                "a second approver is required.");
+            return ApprovalEligibility.NotOpenForDecision(NotPendingMessage(invoice));
         }
 
-        if (_policy.RequiresTwoApprovers(invoice.Amount))
-        {
-            EnsureMaySignLargeInvoice(invoice, approver);
-            return;
-        }
+        var refusal = _policy.RefuseApproval(invoice, approver);
 
-        var limit = _policy.LimitFor(approver.Role)!.Value;
-
-        if (invoice.Amount > limit)
-        {
-            throw new ApprovalRefusedException(
-                ApprovalRefusalReason.AboveApprovalLimit,
-                $"{approver.Role} may approve up to {limit:N2}; invoice {invoice.Id} is " +
-                $"{invoice.Amount:N2} and needs a higher approval level.");
-        }
+        return refusal is null
+            ? ApprovalEligibility.Allowed
+            : ApprovalEligibility.Refused(refusal.Reason, refusal.Message);
     }
 
     /// <summary>
-    /// Above the threshold the first signature may come from any approving role - a role limit
-    /// governs solo authority, not participation - but the second must be a Director.
+    /// Step 1, before the invoice is looked up and before any argument is validated, so a role
+    /// that cannot approve never learns whether an invoice exists.
     /// </summary>
-    private void EnsureMaySignLargeInvoice(Invoice invoice, Approver approver)
+    private void RefuseIfNotAuthorised(string invoiceId, Approver approver, DecisionAction action)
     {
-        if (invoice.Approvals.Count == 0)
-        {
-            return;
-        }
+        var refusal = _policy.RefuseRole(approver);
 
-        if (!_policy.IsSecondApproverRole(approver.Role))
+        if (refusal is not null)
         {
-            throw new ApprovalRefusedException(
-                ApprovalRefusalReason.SecondApproverMustBeDirector,
-                $"Invoice {invoice.Id} is {invoice.Amount:N2}, above {_policy.DualApprovalThreshold:N2}, " +
-                $"so the second approval must come from a {_policy.SecondApproverRole}.");
+            Refuse(refusal, invoiceId, approver, action);
         }
     }
 
-    private void EnsureRoleMayDecide(Approver approver)
+    private void RefuseIfNotPermitted(Invoice invoice, Approver approver)
     {
-        if (!_policy.CanApprove(approver.Role))
+        var refusal = _policy.RefuseApproval(invoice, approver);
+
+        if (refusal is not null)
         {
-            throw new ApprovalRefusedException(
-                ApprovalRefusalReason.RoleCannotApprove,
-                $"Role {approver.Role} has no approval authority.");
+            Refuse(refusal, invoice.Id, approver, DecisionAction.Approve);
         }
+    }
+
+    /// <summary>Logs the refusal apart from the invoice, then throws. Nothing on the invoice is touched.</summary>
+    private void Refuse(ApprovalRefusal refusal, string invoiceId, Approver approver, DecisionAction action)
+    {
+        _refusalLog.Record(new RefusalLogEntry(
+            invoiceId, approver.Username, approver.Role, action, refusal.Reason, refusal.Message, DateTime.UtcNow));
+
+        throw new ApprovalRefusedException(refusal.Reason, refusal.Message);
     }
 
     private bool ApprovalsAreComplete(Invoice invoice) =>
         invoice.Approvals.Count >= (_policy.RequiresTwoApprovers(invoice.Amount) ? 2 : 1);
-
-    /// <summary>
-    /// Scoped to this invoice only. Approvals on other invoices place no restriction on a user.
-    /// </summary>
-    private static bool HasAlreadyApproved(Invoice invoice, Approver approver) =>
-        invoice.Approvals.Any(approval => IsSameUser(approval.Username, approver.Username));
-
-    private static bool IsSameUser(string? left, string? right) =>
-        left is not null && right is not null && string.Equals(left, right, StringComparison.Ordinal);
 
     private Invoice Save(Invoice invoice)
     {
@@ -193,12 +156,14 @@ public class ApprovalService
         _repository.GetById(invoiceId)
         ?? throw new KeyNotFoundException($"Invoice {invoiceId} was not found.");
 
+    private static string NotPendingMessage(Invoice invoice) =>
+        $"Invoice {invoice.Id} is {invoice.Status}; only pending invoices can be decided.";
+
     private static void EnsurePending(Invoice invoice)
     {
         if (invoice.Status != InvoiceStatus.PendingApproval)
         {
-            throw new InvalidOperationException(
-                $"Invoice {invoice.Id} is {invoice.Status}; only pending invoices can be decided.");
+            throw new InvalidOperationException(NotPendingMessage(invoice));
         }
     }
 }
