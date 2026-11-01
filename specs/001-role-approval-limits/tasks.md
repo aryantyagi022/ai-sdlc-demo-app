@@ -116,10 +116,22 @@ The above-threshold branch exists since T023, so these tests are **[EXISTING]** 
 
 ## Phase 6: Polish and cross-cutting
 
-- [ ] T045 [P] Update the "Approval rules live in `ApprovalService`" sentence in `AGENTS.md` to say the rules live in `ApprovalPolicy` and the service orchestrates
-- [ ] T046 Run mutation testing `cd backend/src/InvoiceApp.Domain && dotnet stryker`; the score must not fall below `docs/mutation/before.txt`; add tests for surviving mutants in `ApprovalPolicy`
-- [ ] T047 Run `dotnet test backend/InvoiceApp.sln` and `cd e2e && npm test`; walk the `quickstart.md` manual table rows 1–9
-- [ ] T048 Self-review the diff with the `pr-self-review` skill (every finding fixed, dismissed or deferred with a reason) and write the `ai-interaction-log` entry. That AI interaction log is separate from the application's refusal log
+- [X] T045 [P] Update the "Approval rules live in `ApprovalService`" sentence in `AGENTS.md` to say the rules live in `ApprovalPolicy` and the service orchestrates (done; also corrected the Stryker command in `AGENTS.md` and `quickstart.md`, because the bare command finds no test project)
+- [X] T046 Run mutation testing `cd backend/src/InvoiceApp.Domain && dotnet stryker`; the score must not fall below `docs/mutation/before.txt`; add tests for surviving mutants in `ApprovalPolicy` (needs `--test-project ../../tests/InvoiceApp.Tests/InvoiceApp.Tests.csproj`; overall 30.77% to 72.66%, `ApprovalService` 60.00% to 83.33%, `ApprovalPolicy` 82.14% to 94.64% after one added test; results and survivor verdicts in `docs/mutation/after.txt`)
+- [X] T047 Run `dotnet test backend/InvoiceApp.sln` and `cd e2e && npm test`; walk the `quickstart.md` manual table rows 1–9 (from a fresh clone of `b723c62`: 135 dotnet tests and 17 e2e specs passed; rows 1–9 walked with curl on a fresh server and all matched, with `Version` unchanged after each 403)
+- [X] T048 Self-review the diff with the `pr-self-review` skill (every finding fixed, dismissed or deferred with a reason) and write the `ai-interaction-log` entry. That AI interaction log is separate from the application's refusal log (adversarial pass by a `rubber-duck` agent, 5 findings: 3 deferred design findings below, the `IsSameUser` survivor and the stale-task note dismissed (see "Polish review verdicts"); the new `ApprovalPolicy` test was break-verified in an isolated copy, see `docs/mutation/after.txt`; one task-level log entry written and one corrective entry appended that supersedes the stale limitation in the first; `human-decisions.jsonl` back-filled with verbatim wording only, reconstructions labelled)
+
+### Polish review verdicts
+
+Each finding from the adversarial review has exactly one verdict.
+
+| # | Finding | Verdict | Reason | What future work would need |
+|---|---|---|---|---|
+| 1 | Any role in `Approval:RoleLimits` may give the first signature above the dual-approval threshold (`ApprovalPolicy.cs:117`), so adding a low-limit role such as a Clerk also lets it participate in a high-value approval | **deferred** | Confirmed decision: "a role limit governs solo authority, not participation", and only Manager and Director exist today; no configuration can trigger it yet | An explicit configured list of roles eligible to sign first above the threshold, validated at startup, plus a test with a low-limit role on a high-value invoice |
+| 2 | The dual-approval threshold is the highest configured limit (`ApprovalPolicy.cs:51`), so adding a role with a higher limit moves the point at which two signatures are needed | **deferred** | Intended by the current design (the ladder's top is the threshold) and entrenched by an existing test; with the demo ladder it equals the specified 500,000 | Either an explicit `Approval:DualApprovalThreshold` setting, or startup validation that the second-approver role owns the maximum limit, plus configuration-change tests |
+| 3 | The UI hard-codes "needs a Director" (`wwwroot/app.js:31-32`) although `Approval:SecondApproverRole` is configurable | **deferred** | Correct for the shipped configuration; changing the setting is not yet a supported scenario | Project the required second-approver role in the server's invoice view and render that value, with a test and an e2e case for a non-Director configuration |
+| 4 | `IsSameUser` `&&` → `\|\|` survivor was called not equivalent | **dismissed** | Equivalent by argument (see `docs/mutation/after.txt`); this is a reasoned conclusion, not an experimentally proven one | A test or a proof tool would be needed to upgrade "by argument" to "proven" |
+| 5 | `after.txt` claimed completion while T045–T048 were unchecked | **dismissed** | Stale once the tasks were completed and the evidence updated | none |
 
 ## Dependencies and order
 

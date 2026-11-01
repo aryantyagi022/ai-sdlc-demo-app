@@ -196,6 +196,28 @@ public class ApprovalPolicyTests
         Assert.Equal(ApprovalRefusalReason.DuplicateApprover, refusal.Reason);
         Assert.Contains("demo.manager", refusal.Message);
         Assert.Contains("INV-1", refusal.Message);
+        Assert.Contains("a second approver is required", refusal.Message);
+    }
+
+    [Fact]
+    public void Constructor_ExplainsEachMisconfigurationInItsOwnWords()
+    {
+        var empty = Assert.Throws<ArgumentException>(
+            () => new ApprovalPolicy(new Dictionary<string, decimal>(), "Director"));
+        var blankRole = Assert.Throws<ArgumentException>(
+            () => new ApprovalPolicy(new Dictionary<string, decimal> { [" "] = 1m }, "Director"));
+        var blankSecond = Assert.Throws<ArgumentException>(() => new ApprovalPolicy(Ladder(), ""));
+        var zeroLimit = Assert.Throws<ArgumentException>(
+            () => new ApprovalPolicy(new Dictionary<string, decimal> { ["Manager"] = 0m }, "Manager"));
+
+        Assert.Contains("At least one role limit", empty.Message);
+        Assert.Contains("role name cannot be blank", blankRole.Message);
+        Assert.Contains("second-approver role must be configured", blankSecond.Message);
+        Assert.Contains("greater than zero", zeroLimit.Message);
+        Assert.Equal("roleLimits", empty.ParamName);
+        Assert.Equal("roleLimits", blankRole.ParamName);
+        Assert.Equal("roleLimits", zeroLimit.ParamName);
+        Assert.Equal("secondApproverRole", blankSecond.ParamName);
     }
 
     [Theory]

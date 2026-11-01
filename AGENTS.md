@@ -16,7 +16,7 @@ Invoice approval demo app: ASP.NET Core 8 Web API with a small static web UI.
 - Controllers inherit `ApiControllerBase` and use `Handle(...)` so service errors map to 404, 409 and 400.
 - Every endpoint is behind sign-in. Restrict actions with `[RequireRole("...")]` **only for static permissions that configuration does not own** — `Delete` is Admin only. Never use it to list the roles that may approve: that fact lives in `Approval:RoleLimits` and a second copy would silently block any role added there.
 - Business rules go in the Domain project, never in controllers.
-- Approval rules live in `ApprovalService`; the role limits live in `ApprovalPolicy`, bound from `Approval:RoleLimits`. Adding a role to configuration is the only edit needed to grant approval authority. Startup fails fast on a ladder that cannot work.
+- Approval rules (role, self-approval, duplicate approver, limit, second approver) live in `ApprovalPolicy`, a pure class; `ApprovalService` only orchestrates: lookup, lifecycle, refusal logging, save. Limits are bound from `Approval:RoleLimits`, and the second-approver role from `Approval:SecondApproverRole` (default Director). Adding a role to configuration is the only edit needed to grant approval authority. Startup fails fast on a ladder that cannot work.
 - Authority is checked before anything else — before the invoice is loaded and before arguments are validated — so a role that cannot approve always gets 403 and never learns whether an invoice exists.
 - Validate everything before mutating anything, so a refused attempt leaves the invoice untouched.
 - Repository reads return clones and `Update` returns `false` if the `Version` moved. Forgetting to call `Update` silently persists nothing, so a test that changes an invoice must re-read it through the repository.
@@ -111,7 +111,7 @@ so and get a human decision instead of proceeding.
 - Run end-to-end tests: `cd e2e && npm install && npx playwright install chromium && npm test`
 - Run one test: `dotnet test backend/InvoiceApp.sln --filter FullyQualifiedName~ApprovalServiceTests`
 - Install the mutation tool (pinned, the guard rejects it unpinned): `dotnet tool install -g dotnet-stryker --version 4.13.0`
-- Run mutation testing: `cd backend/src/InvoiceApp.Domain && dotnet stryker`; baseline in `docs/mutation/before.txt`
+- Run mutation testing: `cd backend/src/InvoiceApp.Domain && dotnet stryker --test-project ../../tests/InvoiceApp.Tests/InvoiceApp.Tests.csproj` (the bare command finds no test project); baseline in `docs/mutation/before.txt`, latest in `docs/mutation/after.txt`
 
 ## Commit format
 

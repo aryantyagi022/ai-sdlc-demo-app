@@ -16,7 +16,7 @@ Expected: all green. Each refusal test shows `UpdateCount == 0` and an unchanged
 Mutation check (must not fall below `docs/mutation/before.txt`):
 
 ```bash
-cd backend/src/InvoiceApp.Domain && dotnet stryker
+cd backend/src/InvoiceApp.Domain && dotnet stryker --test-project ../../tests/InvoiceApp.Tests/InvoiceApp.Tests.csproj
 ```
 
 ## Manual, against the running app
