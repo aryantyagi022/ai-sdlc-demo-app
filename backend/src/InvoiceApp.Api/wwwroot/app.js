@@ -95,6 +95,12 @@
         approvalProgress(invoice));
       const row = el('li', {}, summary, badge);
 
+      const history = el('div', { class: 'history' }, el('span', {}, `Submitted by ${invoice.submittedBy || '-'}`));
+      if (invoice.approvals.length) {
+        history.append(el('span', {}, `Approved by ${invoice.approvals.map((a) => `${a.username} (${a.role})`).join(', ')}`));
+      }
+      row.append(history);
+
       if (!mayDecide) {
         return row;
       }

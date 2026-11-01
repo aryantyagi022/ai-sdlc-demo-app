@@ -39,6 +39,16 @@ export class ApprovalsPage {
     return this.itemFor(customerName).getByRole('note');
   }
 
+  /** Who raised the invoice, as a reviewer reads it on the pending card. */
+  submittedByFor(customerName: string): Locator {
+    return this.itemFor(customerName).getByText(/^Submitted by /);
+  }
+
+  /** Who has already signed the invoice, in the order they signed. */
+  approvedByFor(customerName: string): Locator {
+    return this.itemFor(customerName).getByText(/^Approved by /);
+  }
+
   /** The error banner shown after an attempt that the server turned down. */
   get decisionError(): Locator {
     return this.page.getByRole('alert');

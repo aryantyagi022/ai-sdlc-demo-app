@@ -47,6 +47,14 @@ th, td { text-align:left; padding:10px 8px; border-bottom:1px solid var(--line);
   font-size: 0.9rem;
 }
 
+.history {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 1rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
 button[disabled] {
   opacity: 0.55;
   cursor: not-allowed;

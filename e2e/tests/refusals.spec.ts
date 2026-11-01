@@ -102,4 +102,112 @@ test.describe('refusals', () => {
     expect(details.status).toBe('Rejected');
     expect(details.approvals).toBe('1 of 2');
   });
+
+  test('an over-limit approval the page wrongly offered is refused by the server and the page shows why', async ({ page }) => {
+    const login = new LoginPage(page);
+    const invoices = new InvoicesPage(page);
+    const approvals = new ApprovalsPage(page);
+    const customer = unique('Offered In Error');
+
+    await login.signInAs(ADMIN);
+    const id = await invoices.createAndSubmit(customer, 200000);
+
+    // Simulate a stale or tampered page: the invoice list claims this Manager may approve.
+    // Authority is the server's, so the click must still be turned down.
+    await page.route('**/api/invoices', async (route) => {
+      if (route.request().method() !== 'GET') return route.continue();
+      const response = await route.fetch();
+      const list = await response.json();
+      for (const invoice of list) {
+        if (invoice.id === id) invoice.yourApproval = { canApprove: true, explanation: '' };
+      }
+      await route.fulfill({ response, json: list });
+    });
+
+    await login.switchTo(MANAGER);
+    await approvals.open();
+    await expect(approvals.approveButtonFor(id)).toBeEnabled();
+    await approvals.approve(id);
+
+    await expect(approvals.decisionError).toContainText('Manager may approve up to 50,000.00');
+    await expect(approvals.decisionError).toContainText('200,000.00');
+
+    await invoices.open();
+    const details = await invoices.detailsFor(customer);
+    expect(details.status).toBe('Pending Approval');
+    expect(details.approvals).toBe('0 of 1');
+  });
+
+  test('a second window of the same Director is refused as a duplicate and the invoice keeps one signature', async ({ page, browser }) => {
+    const login = new LoginPage(page);
+    const invoices = new InvoicesPage(page);
+    const approvals = new ApprovalsPage(page);
+    const customer = unique('Signed In Another Window');
+
+    await login.signInAs(ADMIN);
+    const id = await invoices.createAndSubmit(customer, 800000);
+
+    // Two windows for the same Director, both loaded while the invoice is still unsigned.
+    await login.switchTo(DIRECTOR);
+    await approvals.open();
+    await expect(approvals.approveButtonFor(id)).toBeEnabled();
+
+    const otherWindow = await browser.newPage();
+    const otherLogin = new LoginPage(otherWindow);
+    const otherApprovals = new ApprovalsPage(otherWindow);
+    await otherLogin.signInAs(DIRECTOR);
+    await otherApprovals.open();
+    await expect(otherApprovals.approveButtonFor(id)).toBeEnabled();
+
+    await approvals.approve(id);
+    await expect(approvals.itemFor(customer)).toContainText('1 of 2 - needs a Director');
+
+    // The other window still offers Approve; the server refuses and the window says why.
+    await otherApprovals.approve(id);
+    await expect(otherApprovals.decisionError).toContainText(`demo.director has already approved invoice ${id}`);
+
+    await invoices.open();
+    expect((await invoices.detailsFor(customer)).approvals).toBe('1 of 2 - needs a Director');
+    await otherWindow.close();
+  });
+
+  test('an earlier error message is cleared once the next attempt succeeds', async ({ page }) => {
+    const login = new LoginPage(page);
+    const invoices = new InvoicesPage(page);
+    const approvals = new ApprovalsPage(page);
+    const customer = unique('Error Then Success');
+
+    await login.signInAs(ADMIN);
+    const id = await invoices.createAndSubmit(customer, 2500);
+
+    await login.switchTo(MANAGER);
+    await approvals.open();
+    await approvals.reject(id, '   ');
+    await expect(approvals.decisionError).toContainText('reason');
+
+    await approvals.approve(id);
+    await expect(approvals.decisionError).toBeHidden();
+    await expect(approvals.emptyMessage).toBeHidden();
+  });
+
+  test('a reviewer sees who submitted an invoice and who has signed it so far', async ({ page }) => {
+    const login = new LoginPage(page);
+    const invoices = new InvoicesPage(page);
+    const approvals = new ApprovalsPage(page);
+    const customer = unique('Visible History');
+
+    await login.signInAs(ADMIN);
+    const id = await invoices.createAndSubmit(customer, 900000);
+
+    await login.switchTo(MANAGER);
+    await approvals.open();
+    await expect(approvals.submittedByFor(customer)).toHaveText('Submitted by demo.admin');
+    await expect(approvals.approvedByFor(customer)).toHaveCount(0);
+    await approvals.approve(id);
+
+    await login.switchTo(DIRECTOR);
+    await approvals.open();
+    await expect(approvals.submittedByFor(customer)).toHaveText('Submitted by demo.admin');
+    await expect(approvals.approvedByFor(customer)).toHaveText('Approved by demo.manager (Manager)');
+  });
 });
